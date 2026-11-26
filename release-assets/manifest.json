@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "engine": {
+    "file": "release-assets/pdf-engine-0.3.15.js",
+    "sha256": "34561e07851000e186ab22e1cb8e38b84e54f2de618946de4053f692c8d2003b",
+    "bytes": 891366
+  },
+  "fonts": {
+    "file": "release-assets/pdf-fonts-v1.json",
+    "sha256": "76df3504ffe8e93e530e75807ef7cc48ecf844c584e3d7224f19b6c2e35d1a3c",
+    "bytes": 29433848
+  }
+}
