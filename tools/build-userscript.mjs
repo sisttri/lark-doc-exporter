@@ -8,6 +8,7 @@ import {gzipSync} from 'node:zlib';
 import {zipSync} from 'fflate';
 import {encodeZ85} from '../src/userscript/pdf-fonts.js';
 import {VERSION} from '../src/shared.js';
+import {assertUserscriptLint} from './userscript-lint.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const assetFiles = {engine:'release-assets/pdf-engine-0.3.15.js', fonts:'release-assets/pdf-fonts-v1.json'};
@@ -16,6 +17,37 @@ const fontHashes = {
   Regular:'689db17ebf1a1dc29b075c42d27a3101f4f91e888ded96dfe54af3d5df9faefa',
   Bold:'cd441dc10e7d450eb292b73a03a060a50ab88893fc9d69b9b143cd616b9c2ca5',
 };
+
+// Keep upstream library semantics; only their existing style conventions are exempt.
+// The paired, preserved comments stop at each module, including the PDF Worker.
+const upstreamRules = {
+  fflate:'curly, no-redeclare, no-return-assign, no-sequences',
+  parse5:'curly, dot-notation',
+  entities:'dot-notation',
+};
+const upstreamEditor = {
+  name:'upstream-editor-boundaries',
+  setup(builder) {
+    builder.onLoad({filter:/node_modules\/(fflate|parse5|entities)\/.*\.js$/}, async ({path:file}) => {
+      const name = file.match(/node_modules\/(fflate|parse5|entities)\//)[1];
+      // Plugin-specific lint comments belong to the upstream development setup.
+      const source = (await fs.readFile(file, 'utf8')).replace(/^\s*\/\/ eslint-(?:disable|enable)[^\n]*$/gm, '');
+      const rules = upstreamRules[name];
+      return {contents:`/* eslint-disable ${rules} -- @preserve Upstream ${name} conventions only. */\n${source}\n/* eslint-enable ${rules} -- @preserve End upstream ${name}. */`};
+    });
+  },
+};
+
+function readableBundlerHelpers(source) {
+  // These are esbuild's lazy-module helpers. Parentheses and braces preserve
+  // their behavior while satisfying the editor's comma/control-flow rules.
+  return source
+    .replace('return fn && (res = (0, fn[__getOwnPropNames(fn)[0]])(fn = 0)), res;',
+      'return (fn && (res = (0, fn[__getOwnPropNames(fn)[0]])(fn = 0)), res);')
+    .replace(/for \(var name in all\)\n(\s*)(__defProp\(target, name, \{ get: all\[name\], enumerable: true \}\);)/,
+      'for (var name in all) {\n$1$2\n$1}')
+    .replace(/=> \((init_[\w$]+\(\), [\w$]+_exports)\)/g, '=> (($1))');
+}
 
 if (process.argv.includes('--assets-only')) {
   const fontArchive = [];
@@ -98,6 +130,7 @@ self.onmessage = async ({data}) => {
 };`,
   },
   bundle:true, format:'iife', target:'chrome115', minify:false, charset:'utf8', write:false, legalComments:'inline',
+  plugins:[upstreamEditor],
 });
 // 用函数本身保存 Worker 源码，产物中的排版逻辑仍可直接阅读。
 const pdfAssets = 'export const resourceHashes = ' + JSON.stringify(resourceHashes) + ';\n' +
@@ -129,6 +162,7 @@ const banner = [
   '// @downloadURL  https://raw.githubusercontent.com/sisttri/lark-doc-exporter/main/lark-doc-exporter.user.js',
   ...resourceMetadata,
   '// ==/UserScript==',
+  '/* global globalThis:readonly */',
   '// Readable bundled libraries for local HTML parsing, ZIP output and isolated Worker decompression:',
   '// fflate 0.8.2 (MIT): https://github.com/101arrowz/fflate/tree/v0.8.2',
   '// parse5 7.3.0 (MIT): https://github.com/inikulin/parse5/tree/v7.3.0',
@@ -139,7 +173,7 @@ const banner = [
 const result = await build({
   absWorkingDir:root, entryPoints:['src/userscript/entry.js'], bundle:true, format:'iife', target:'chrome115',
   charset:'utf8', minify:false, legalComments:'inline', banner:{js:banner}, write:false,
-  plugins:[{
+  plugins:[upstreamEditor, {
     name:'cached-pdf',
     setup(builder) {
       builder.onResolve({filter:/^pdf-worker-assets$/}, () => ({path:'assets', namespace:'cached-pdf'}));
@@ -147,7 +181,9 @@ const result = await build({
     },
   }],
 });
-const source = result.outputFiles[0].contents;
+const text = readableBundlerHelpers(result.outputFiles[0].text);
+assertUserscriptLint(text);
+const source = Buffer.from(text);
 if (source.length >= 2_000_000) throw new Error('用户脚本超过 Greasy Fork 2 MB 上限；禁止压缩自有代码规避。');
 await fs.writeFile(path.join(root, 'lark-doc-exporter.user.js'), source);
 const installerFiles = {'飞书文档导出工具.user.js':source, LICENSE:await fs.readFile(path.join(root, 'LICENSE'))};

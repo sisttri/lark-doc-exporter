@@ -218,13 +218,15 @@ export async function capturePage({ stepRatio = 0.6, dwellMs, maxSteps = 400, on
     const tableStyles = createTableStyleCapture();
     function sampleTable(el) {
       let table = el.querySelector("table");
-      if (isAuxiliaryTable(table)) table = [...el.querySelectorAll('table')].find(candidate => {
-        if (isAuxiliaryTable(candidate)) return false;
-        for (let parent=candidate.parentElement;parent && parent !== el;parent=parent.parentElement) {
-          if (isAuxiliaryTable(parent)) return false;
-        }
-        return true;
-      });
+      if (isAuxiliaryTable(table)) {
+        table = [...el.querySelectorAll('table')].find(candidate => {
+          if (isAuxiliaryTable(candidate)) return false;
+          for (let parent=candidate.parentElement;parent && parent !== el;parent=parent.parentElement) {
+            if (isAuxiliaryTable(parent)) return false;
+          }
+          return true;
+        });
+      }
       if (!table) return;
       const rows = logicalTableRows(el,table);
       if (!rows.length) return;
@@ -805,9 +807,10 @@ export async function capturePage({ stepRatio = 0.6, dwellMs, maxSteps = 400, on
           windows -= 1;
           // 滚到这个缺口的第一行。用实际返回的可见行重新校准一次，吸收自动换行的高度差。
           let targetY = anchor.y + (num - anchor.num) * anchor.height;
+          const missingLine = num;
           for (let pass = 0; pass < 2; pass += 1) {
             targetY = Math.max(data.top ?? -Infinity, Math.min(data.bottom ?? Infinity, targetY));
-            await sampleWindow(id, targetY, () => data.lines.has(num));
+            await sampleWindow(id, targetY, () => data.lines.has(missingLine));
             if (data.lines.has(num)) break;
             const current = data.anchor;
             const adjustedY = current.y + (num - current.num) * current.height;

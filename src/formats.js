@@ -364,10 +364,12 @@ function markdownFlow(nodes, lookup) {
   let inline = [];
   function flush() {
     const text = markdownInline(inline, lookup).trim();
-    if (text) chunks.push(text
-      .replace(/(^|\n)([0-9]{1,9})([.)])(?= )/gu, '$1$2\\$3')
-      .replace(/(^|\n)([-+>])(?= )|(^|\n)([-=])(?=[-=]*(?:\n|$))/gu,
-        (_, beforeList, marker, beforeRule, rule) => (beforeList ?? beforeRule) + '\\' + (marker ?? rule)));
+    if (text) {
+      chunks.push(text
+        .replace(/(^|\n)([0-9]{1,9})([.)])(?= )/gu, '$1$2\\$3')
+        .replace(/(^|\n)([-+>])(?= )|(^|\n)([-=])(?=[-=]*(?:\n|$))/gu,
+          (_, beforeList, marker, beforeRule, rule) => (beforeList ?? beforeRule) + '\\' + (marker ?? rule)));
+    }
     inline = [];
   }
   for (const node of nodes) {

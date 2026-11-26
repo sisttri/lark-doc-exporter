@@ -27,8 +27,9 @@ function checkedSize(snapshot) {
 }
 function dataUrl(bytes, type) {
   const pieces = [];
-  for (let i = 0; i < bytes.length; i += 16384)
+  for (let i = 0; i < bytes.length; i += 16384) {
     pieces.push(String.fromCharCode(...bytes.subarray(i, i + 16384)));
+  }
   return 'data:' + type + ';base64,' + btoa(pieces.join(''));
 }
 function staticPng(bytes) {
@@ -109,8 +110,11 @@ function tableRows(table) {
   const rows = [];
   for (const node of table.children || []) {
     if (node.tag === 'tr') rows.push({node, header: false});
-    if (SECTIONS.has(node.tag)) for (const row of node.children || [])
-      if (row.tag === 'tr') rows.push({node:row, header:node.tag === 'thead'});
+    if (SECTIONS.has(node.tag)) {
+      for (const row of node.children || []) {
+        if (row.tag === 'tr') rows.push({node:row, header:node.tag === 'thead'});
+      }
+    }
   }
   return rows;
 }
@@ -129,7 +133,8 @@ function columnWidths(grid, count, availableWidth, hints) {
     const widths = Array(count);
     let pending = source.map((_, index) => index), remaining = availableWidth, total = 10000;
     while (pending.length) {
-      const narrow = pending.filter(index => remaining * source[index] / total - padding[index] < MIN_COLUMN_WIDTH);
+      const available = remaining, weightTotal = total;
+      const narrow = pending.filter(index => available * source[index] / weightTotal - padding[index] < MIN_COLUMN_WIDTH);
       if (!narrow.length) {
         for (const index of pending) widths[index] = remaining * source[index] / total - padding[index];
         break;
@@ -155,11 +160,13 @@ function columnWidths(grid, count, availableWidth, hints) {
     }
     return Math.min(160, Math.max(1, longest, line, hasImage(node) ? 20 : 0));
   }
-  for (const row of grid) for (let column = 0; column < row.length; column++) {
-    const entry = row[column];
-    if (!entry?.cell) continue;
-    const weight = Math.sqrt(contentUnits(entry.cell) / entry.colSpan);
-    for (let index = column; index < column + entry.colSpan; index++) weights[index] = Math.max(weights[index], weight);
+  for (const row of grid) {
+    for (let column = 0; column < row.length; column++) {
+      const entry = row[column];
+      if (!entry?.cell) continue;
+      const weight = Math.sqrt(contentUnits(entry.cell) / entry.colSpan);
+      for (let index = column; index < column + entry.colSpan; index++) weights[index] = Math.max(weights[index], weight);
+    }
   }
   const budget = availableWidth - (count - 1) * COLUMN_GAP;
   const remaining = budget - count * MIN_COLUMN_WIDTH;
@@ -227,9 +234,11 @@ export function pdfDefinition(snapshot, prepared = {images:{}, names:new Map()})
         while (grid[r][c] !== undefined) c++;
         const cs = Math.max(1, cell.colspan || 1), rs = Math.max(1, Math.min(rows.length - r, cell.rowspan || 1));
         if (c + cs > 12 || (c + cs) * rows.length > 14000) return flatTable();
-        for (let y = r; y < r+rs; y++) for (let x = c; x < c+cs; x++) {
-          if (grid[y][x] !== undefined) return flatTable();
-          grid[y][x] = {};
+        for (let y = r; y < r+rs; y++) {
+          for (let x = c; x < c+cs; x++) {
+            if (grid[y][x] !== undefined) return flatTable();
+            grid[y][x] = {};
+          }
         }
         grid[r][c] = {cell, colSpan:cs, rowSpan:rs};
         width = Math.max(width, c + cs); c += cs;
@@ -282,10 +291,12 @@ export function pdfDefinition(snapshot, prepared = {images:{}, names:new Map()})
       // Allow for pdfmake's number, period and space when budgeting width for list content.
       const itemWidth = availableWidth - fontSize * (markerChars * .6 + .7);
       const margin = [0,3,0,4];
-      if (itemWidth < MIN_COLUMN_WIDTH) return {
-        stack:items.map((item,index) => ({stack:[textLine(tag === 'ol' ? (start+index)+'.' : '•'),
-          ...sequence(item.children || [], availableWidth, fontSize, cellColor)]})), margin
-      };
+      if (itemWidth < MIN_COLUMN_WIDTH) {
+        return {
+          stack:items.map((item,index) => ({stack:[textLine(tag === 'ol' ? (start+index)+'.' : '•'),
+            ...sequence(item.children || [], availableWidth, fontSize, cellColor)]})), margin
+        };
+      }
       return {[tag]:items.map(item => ({stack:sequence(item.children || [], itemWidth, fontSize, cellColor)})),
         ...(tag === 'ol' ? {start} : {}), margin};
     }

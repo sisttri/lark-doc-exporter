@@ -50,8 +50,9 @@ export async function captureLoadedImage(id, {document = globalThis.document, wa
         if (!sameImageState(state,current())) continue;
         const width = bitmap?.width ?? state.width, height = bitmap?.height ?? state.height;
         checkDimensions(width,height);
-        if (saved && sameImageState(saved.state,state) && saved.image.width === width && saved.image.height === height)
+        if (saved && sameImageState(saved.state,state) && saved.image.width === width && saved.image.height === height) {
           return {state,image:saved.image};
+        }
         const canvas = document.createElement('canvas');
         canvas.width=width; canvas.height=height;
         const context = canvas.getContext('2d');

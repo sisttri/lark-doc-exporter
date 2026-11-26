@@ -119,9 +119,11 @@ function directTableRows(table) {
     }
   }
   // Minimal capture DOMs can expose only the native table.rows collection.
-  if (!rows.length && table?.rows) for (const row of table.rows) {
-    const group = row.parentElement || table, section = tagName(group);
-    rows.push({row,section:['thead','tfoot'].includes(section) ? section : 'tbody',group,auxiliary:false});
+  if (!rows.length && table?.rows) {
+    for (const row of table.rows) {
+      const group = row.parentElement || table, section = tagName(group);
+      rows.push({row,section:['thead','tfoot'].includes(section) ? section : 'tbody',group,auxiliary:false});
+    }
   }
   return rows;
 }

@@ -135,9 +135,11 @@ export function installTheme(view, host) {
       const content = document.querySelector?.('[data-block-type="page"], .page-block, .docx-root') || body || root;
       const styles = [content, body, root].filter(Boolean).map(node => view.getComputedStyle(node));
       const semantic = (...names) => {
-        for (const name of names) for (const style of styles) {
-          const value = resolve(style.getPropertyValue?.(name)?.trim());
-          if (value) return value;
+        for (const name of names) {
+          for (const style of styles) {
+            const value = resolve(style.getPropertyValue?.(name)?.trim());
+            if (value) return value;
+          }
         }
         return null;
       };

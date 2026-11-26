@@ -22,6 +22,7 @@ before(async () => {
   fixture = await fs.mkdtemp(path.join(os.tmpdir(), 'feishu-userscript-build-'));
   await fs.mkdir(path.join(fixture, 'tools'));
   await fs.copyFile(path.join(root, 'tools/build-userscript.mjs'), path.join(fixture, 'tools/build-userscript.mjs'));
+  await fs.copyFile(path.join(root, 'tools/userscript-lint.mjs'), path.join(fixture, 'tools/userscript-lint.mjs'));
   await fs.cp(path.join(root, 'src'), path.join(fixture, 'src'), {recursive:true});
   await fs.cp(path.join(root, 'licenses'), path.join(fixture, 'licenses'), {recursive:true});
   await fs.copyFile(path.join(root, 'LICENSE'), path.join(fixture, 'LICENSE'));
