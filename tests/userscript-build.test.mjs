@@ -71,6 +71,7 @@ test('production build requires immutable URLs and matching hashes, then emits a
   assert.match(source, /@version\s+0\.0\.1/);
   assert.match(source, /@license\s+MIT/);
   assert.match(source, /@grant\s+GM_getResourceText/);
+  assert.match(source, /@grant\s+unsafeWindow/);
   for (const kind of ['engine', 'fonts']) assert.ok(source.includes(manifest[kind].url + '#sha256=' + manifest[kind].sha256));
   assert.ok(source.includes('function pdfDefinition('));
   assert.ok(source.includes('function prepareImages('));

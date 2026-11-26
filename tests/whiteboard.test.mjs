@@ -13,7 +13,7 @@ test('白板仅复制明确内容层，白底填充在复制之前且返回PNG�
   const fixture = whiteboardFixture({decoys:true});
   assert.equal(findWhiteboardCanvas(fixture.block),fixture.content);
   const image = await captureWhiteboardPreview('board',{document:fixture.document,...clock(t)});
-  assert.deepEqual(image,{blockId:'board',mime:'image/png',width:64,height:32,alt:'白板静态预览（当前画面）',dataUrl:pngDataUrl});
+  assert.deepEqual(image,{blockId:'board',mime:'image/png',width:64,height:32,alt:'白板静态预览（当前画面，清晰度受页面限制）',dataUrl:pngDataUrl});
   assert.deepEqual(fixture.draws,[[fixture.content,0,0]]);
   assert.deepEqual(fixture.fills,[{color:'#ffffff',args:[0,0,64,32]}]);
   assert.deepEqual(fixture.operations,['fill','draw']);
@@ -130,6 +130,17 @@ test('已知白板view原生重绘到两倍真实像素，复制后精确恢复�
   assert.deepEqual(fixture.draws,[[fixture.content,0,0]]);
   assert.equal(fixture.view.getAttribute('style'),original);
   assert.equal(fixture.content.width,64);assert.equal(fixture.content.height,32);
+});
+
+test('白板半像素CSS高度重绘后的单像素取整差异不触发低清回退', async t => {
+  const fixture=whiteboardFixture({view:true,width:818,height:764,cssWidth:818,cssHeight:763.5});
+  const image=await captureWhiteboardPreview('board',{document:fixture.document,
+    ...clock(t,() => fixture.redraw())});
+  assert.equal(image.width,1636);
+  assert.equal(image.height,1527);
+  assert.equal(fixture.view.getAttribute('style'),null);
+  assert.equal(fixture.content.width,818);
+  assert.equal(fixture.content.height,764);
 });
 
 test('白板已有每CSS像素两点的内容画布时不修改view', async t => {

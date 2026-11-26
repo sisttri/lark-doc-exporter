@@ -847,3 +847,52 @@ test('同步块尚未加载或包含未知子块时保留具体提示，引用�
     {code:'unsupported_block', label:'引用容器 pending-quote 尚未读取到已渲染正文'},
   ]);
 });
+
+test('view 附件卡保留文件名与安全链接，装饰 SVG 只产生准确的原件未采集提示', () => {
+  const result = convertCapture(captureOf([{
+    id:'attachment-view',type:'view',html:'<div data-block-id="attachment-view" data-block-type="view">' +
+      '<div data-block-id="attachment-file" data-block-type="file"><div class="file-icon">' +
+      '<svg width="48" height="48"><path d="M0 0h48v48z"/></svg></div>' +
+      '<a href="https://example.org/guide.pdf">使用说明.pdf</a><button>下载</button></div></div>',
+  }], {warnings:[{code:'unsupported_block',label:'未适配的块类型：view'}]}));
+  assert.match(result.html, /<a href="https:\/\/example\.org\/guide\.pdf">使用说明\.pdf<\/a> \[原件未采集\]/);
+  assert.deepEqual(result.warnings, [{code:'missing_attachment',label:'附件块 attachment-file 原件未采集，仅保留文件名和可用链接'}]);
+  assert.doesNotMatch(result.html, /<svg|未转换的行内图形|下载/);
+  assertAllowedTags(result.html);
+});
+
+test('file 根块中的装饰 SVG 不被当作正文行内图形', () => {
+  const result = convertCapture(captureOf([{
+    id:'attachment',type:'file',html:'<div><svg width="48" height="48"><path/></svg><span>记录.csv</span></div>',
+  }]));
+  assert.match(result.html, /记录\.csv \[原件未采集\]/);
+  assert.deepEqual(result.warnings, [{code:'missing_attachment',label:'附件块 attachment 原件未采集，仅保留文件名和可用链接'}]);
+});
+
+test('view 容器按已渲染子块保留正文，嵌套 view 与表格单元格复用同一规则', () => {
+  const view = (id,inner) => ({id,type:'view',html:'<div data-block-id="' + id + '" data-block-type="view">' + inner + '</div>'});
+  const nested = view('nested', textBlock('nested-text',['嵌套正文']).html);
+  const main = view('main', headingBlock('heading',2,'章节').html + listBlock('item','bullet','列表项').html +
+    nested.html + imageBlock('picture','示意图').html);
+  const cell = view('cell-view', textBlock('cell-text',['格内正文']).html +
+    '<div data-block-id="unknown-cell" data-block-type="unknown-view-content">未知内容</div>');
+  const result = convertCapture(captureOf([main,tableBlock('table','<tr><td>' + cell.html + '</td></tr>')], {
+    images:[{blockId:'picture',mime:'image/png',alt:'示意图'}],
+  }));
+  assert.match(result.html, /<h2>章节<\/h2><ul><li>列表项<\/li><\/ul><p>嵌套正文<\/p><img src="images\/picture\.png" alt="示意图">/);
+  assert.match(result.html, /<td><p>格内正文<\/p><\/td>/);
+  assert.deepEqual(result.warnings, [{code:'unsupported_block',label:'块 unknown-cell 未转换（unknown-view-content）'}]);
+  assertAllowedTags(result.html);
+});
+
+test('空 view 与未知 view 子块继续明确告警，不按图片放行', () => {
+  const result = convertCapture(captureOf([
+    {id:'empty-view',type:'view',html:'<div data-block-type="view">加载中</div>'},
+    {id:'unknown-view',type:'view',html:'<div data-block-type="view"><div data-block-id="unknown" data-block-type="unknown-view-content">未知正文</div></div>'},
+  ]));
+  assert.deepEqual(result.warnings, [
+    {code:'unsupported_block',label:'视图容器 empty-view 尚未读取到已渲染正文'},
+    {code:'unsupported_block',label:'块 unknown 未转换（unknown-view-content）'},
+  ]);
+  assert.doesNotMatch(result.html, /加载中|未知正文|<img/);
+});

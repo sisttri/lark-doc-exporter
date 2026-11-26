@@ -17,7 +17,7 @@ const RASTER_EXTENSIONS = new Set(['png', 'jpg', 'gif', 'webp']);
 const HEADING_TYPE = /^heading([1-6])$/u;
 const ESCAPES = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
 const CELL_BLOCK_TYPES = new Set([
-  'text', 'bullet', 'ordered', 'code', 'image', 'whiteboard', 'quote', 'callout', 'quote_container', 'synced_reference', 'divider', 'todo',
+  'text', 'bullet', 'ordered', 'code', 'image', 'whiteboard', 'quote', 'callout', 'quote_container', 'synced_reference', 'view', 'divider', 'todo',
   'heading1', 'heading2', 'heading3', 'heading4', 'heading5', 'heading6', 'file',
 ]);
 const LANGUAGE_ALIASES = Object.freeze({
@@ -106,7 +106,7 @@ function normalizeRichContent(root, blockId, addWarning) {
       .replace(/\s+/gu, ' ').trim().slice(0, 2048);
   }
   function visit(node) {
-    if (nodeAttr(node, 'data-block-type') === 'whiteboard') return;
+    if (['whiteboard','file'].includes(nodeAttr(node, 'data-block-type'))) return;
     for (let index = 0; index < (node.childNodes || []).length; index++) {
       const child = node.childNodes[index];
       if (!child.tagName || isHidden(child)) continue;
@@ -480,7 +480,7 @@ export function convertCapture(capture) {
         const content = renderQuote(info);
         if (content) return content;
       }
-      const label = info.type === 'quote_container' ? '引用容器 ' : '同步块 ';
+      const label = info.type === 'quote_container' ? '引用容器 ' : info.type === 'view' ? '视图容器 ' : '同步块 ';
       addWarning('unsupported_block', label + info.id + ' 尚未读取到已渲染正文');
       return null;
     }
@@ -606,7 +606,8 @@ export function convertCapture(capture) {
       case 'quote':
       case 'callout': return renderQuote(info);
       case 'quote_container':
-      case 'synced_reference': return renderContainer(info);
+      case 'synced_reference':
+      case 'view': return renderContainer(info);
       case 'divider': return '<hr>';
       case 'todo': return renderTodo(info);
       default: {
@@ -716,7 +717,8 @@ export function convertCapture(capture) {
       case 'quote':
       case 'callout': return renderQuote(info);
       case 'quote_container':
-      case 'synced_reference': return renderContainer(info);
+      case 'synced_reference':
+      case 'view': return renderContainer(info);
       case 'divider': return '<hr>';
       case 'todo': return renderTodo(info);
       default:
@@ -739,7 +741,7 @@ export function convertCapture(capture) {
       addWarning('unsupported_block', '块 ' + (id || '(无 id)') + ' 无法解析');
       continue;
     }
-    if (type !== 'whiteboard') normalizeRichContent(element, id, addWarning);
+    if (!['whiteboard','file'].includes(type)) normalizeRichContent(element, id, addWarning);
     infos.push({ id, type, element });
   }
 

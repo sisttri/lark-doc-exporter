@@ -14,6 +14,7 @@
 // @noframes
 // @grant        GM_registerMenuCommand
 // @grant        GM_getResourceText
+// @grant        unsafeWindow
 // @updateURL    https://raw.githubusercontent.com/sisttri/lark-doc-exporter/main/lark-doc-exporter.user.js
 // @downloadURL  https://raw.githubusercontent.com/sisttri/lark-doc-exporter/main/lark-doc-exporter.user.js
 // @resource     pdfEngine https://raw.githubusercontent.com/sisttri/lark-doc-exporter/26c22708c7b5a952611c185fa2c151d60bde83ce/release-assets/pdf-engine-0.3.15.js#sha256=34561e07851000e186ab22e1cb8e38b84e54f2de618946de4053f692c8d2003b
@@ -9977,6 +9978,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
     "callout",
     "quote_container",
     "synced_reference",
+    "view",
     "divider",
     "todo",
     "heading1",
@@ -10058,7 +10060,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
       return cleanText(explicit || (annotation ? textContent(annotation) : "") || (title ? textContent(title) : "") || (node.tagName === "math" ? textContent(node) : "")).replace(/\s+/gu, " ").trim().slice(0, 2048);
     }
     function visit(node) {
-      if (nodeAttr(node, "data-block-type") === "whiteboard") return;
+      if (["whiteboard", "file"].includes(nodeAttr(node, "data-block-type"))) return;
       for (let index = 0; index < (node.childNodes || []).length; index++) {
         const child = node.childNodes[index];
         if (!child.tagName || isHidden(child)) continue;
@@ -10361,7 +10363,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
           const content2 = renderQuote(info);
           if (content2) return content2;
         }
-        const label = info.type === "quote_container" ? "引用容器 " : "同步块 ";
+        const label = info.type === "quote_container" ? "引用容器 " : info.type === "view" ? "视图容器 " : "同步块 ";
         addWarning("unsupported_block", label + info.id + " 尚未读取到已渲染正文");
         return null;
       }
@@ -10487,6 +10489,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
           return renderQuote(info);
         case "quote_container":
         case "synced_reference":
+        case "view":
           return renderContainer(info);
         case "divider":
           return "<hr>";
@@ -10601,6 +10604,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
           return renderQuote(info);
         case "quote_container":
         case "synced_reference":
+        case "view":
           return renderContainer(info);
         case "divider":
           return "<hr>";
@@ -10625,7 +10629,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
         addWarning("unsupported_block", "块 " + (id || "(无 id)") + " 无法解析");
         continue;
       }
-      if (type !== "whiteboard") normalizeRichContent(element, id, addWarning);
+      if (!["whiteboard", "file"].includes(type)) normalizeRichContent(element, id, addWarning);
       infos.push({ id, type, element });
     }
     const rawTitle = cleanText(capture.source?.title ?? "").replace(/\s+/gu, " ").trim();
@@ -12272,6 +12276,88 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
     return source;
   }
 
+  // src/userscript/whiteboard-native.js
+  var boundsKeys = ["minX", "maxX", "minY", "maxY"];
+  function sceneBounds(manager) {
+    const source = manager.getNodesBounds();
+    if (!source || !boundsKeys.every((key) => Number.isFinite(source[key]))) return null;
+    const bounds = Object.fromEntries(boundsKeys.map((key) => [key, source[key]]));
+    const width = bounds.maxX - bounds.minX, height = bounds.maxY - bounds.minY;
+    return width > 0 && height > 0 && Number.isFinite(width * height) ? bounds : null;
+  }
+  function findBoard(root, id, recordId) {
+    const pending = [root], seen = /* @__PURE__ */ new Set();
+    while (pending.length && seen.size < 2e4) {
+      const model = pending.pop();
+      if (!model || typeof model !== "object" || seen.has(model)) continue;
+      seen.add(model);
+      if (String(model.id) === id && model.type === "whiteboard" && model.record?.id === recordId) return model;
+      if (Array.isArray(model.children)) pending.push(...model.children);
+      const children = model.innerBlockManager?.rootBlockModel?.children;
+      if (Array.isArray(children)) pending.push(...children);
+    }
+    return null;
+  }
+  async function renderNativeWhiteboard(id, { document: document2, pageView, checkStop = () => {
+  }, waitForReady, background } = {}) {
+    let canvas, owned = false;
+    try {
+      checkStop();
+      const key = String(id);
+      if (!/^[\w-]{1,160}$/u.test(key)) return null;
+      const page = document2?.querySelector('[data-block-type="page"]');
+      const block = document2?.querySelector('[data-block-id="' + key + '"]');
+      const pageId = page?.getAttribute("data-record-id"), recordId = block?.getAttribute("data-record-id");
+      const root = pageView?.PageMain?.blockManager?.rootBlockModel;
+      if (!pageId || !recordId || !root || root.record?.id !== pageId || block.isConnected === false || block.getAttribute("data-block-type") !== "whiteboard" || !page.contains(block)) return null;
+      const model = findBoard(root, key, recordId);
+      const app = model?.whiteboardBlock?.abilityKit?.getRatioApp?.()?.app;
+      const manager = app?.application?.nodeManager, renderer = app?.renderManager;
+      if (typeof manager?.getNodesBounds !== "function" || typeof renderer?.getImageOffscreenCanvas !== "function") return null;
+      const belongsToPage = () => pageView?.PageMain?.blockManager?.rootBlockModel === root && root.record?.id === pageId && document2.querySelector('[data-block-type="page"]') === page && page.getAttribute("data-record-id") === pageId && document2.querySelector('[data-block-id="' + key + '"]') === block && block.isConnected !== false && block.getAttribute("data-record-id") === recordId && page.contains(block) && findBoard(root, key, recordId) === model && model.whiteboardBlock?.abilityKit?.getRatioApp?.()?.app === app;
+      if (waitForReady && !await waitForReady()) return null;
+      checkStop();
+      if (!belongsToPage()) return null;
+      const source = sceneBounds(manager);
+      if (!source) return null;
+      const bounds = { minX: source.minX - 24, maxX: source.maxX + 24, minY: source.minY - 24, maxY: source.maxY + 24 };
+      const width = bounds.maxX - bounds.minX, height = bounds.maxY - bounds.minY;
+      const scale = Math.min(2, 8192 / width, 8192 / height, Math.sqrt(159e5 / (width * height)));
+      if (!Number.isFinite(scale) || scale <= 0 || width * scale < 1 || height * scale < 1) return null;
+      checkStop();
+      canvas = renderer.getImageOffscreenCanvas(bounds, scale, normalizeColor(background) || "#ffffff");
+      if (!canvas || typeof canvas.then === "function" || canvas.isConnected !== false || typeof canvas.toDataURL !== "function" || document2.contains?.(canvas)) return null;
+      owned = true;
+      checkStop();
+      const outputWidth = canvas.width, outputHeight = canvas.height;
+      if (!Number.isSafeInteger(outputWidth) || !Number.isSafeInteger(outputHeight) || outputWidth < 1 || outputHeight < 1 || outputWidth > 8192 || outputHeight > 8192 || outputWidth * outputHeight > 16e6) return null;
+      const dataUrl2 = canvas.toDataURL("image/png");
+      if (typeof dataUrl2 !== "string" || dataUrl2.length > 32 * 1024 * 1024 + 64 || !/^data:image\/png;base64,[A-Za-z0-9+/]+={0,2}$/u.test(dataUrl2)) return null;
+      checkStop();
+      const currentBounds = sceneBounds(manager);
+      if (!belongsToPage() || !currentBounds || !boundsKeys.every((name) => currentBounds[name] === source[name])) return null;
+      return {
+        blockId: id,
+        mime: "image/png",
+        width: outputWidth,
+        height: outputHeight,
+        alt: "白板静态图（原始场景渲染）",
+        dataUrl: dataUrl2
+      };
+    } catch (error) {
+      if (error?.name === "AbortError") throw error;
+      return null;
+    } finally {
+      if (owned) {
+        try {
+          canvas.width = 0;
+          canvas.height = 0;
+        } catch {
+        }
+      }
+    }
+  }
+
   // src/userscript/whiteboard.js
   var CONTENT_CANVAS = ".whiteboad-x-content-canvas canvas.whiteboad-x-normal-canvas";
   var BLOCK_VIEW = ".whiteboard-view-container.is-block";
@@ -12399,8 +12485,8 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
       scale,
       cssWidth: box.width * scale,
       cssHeight: box.height * scale,
-      width: Math.floor(source.width * scale),
-      height: Math.floor(source.height * scale),
+      width: Math.floor(canvasBox.width * density * scale),
+      height: Math.floor(canvasBox.height * density * scale),
       originalWidth: source.width,
       originalHeight: source.height,
       limited: density * scale < 2
@@ -12443,7 +12529,12 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
       dataUrl: dataUrl2
     };
   }
-  async function captureWhiteboardPreview(id, { document: document2 = globalThis.document, wait: wait2, checkStop } = {}) {
+  async function captureWhiteboardPreview(id, {
+    document: document2 = globalThis.document,
+    wait: wait2,
+    checkStop,
+    pageView = typeof unsafeWindow === "undefined" ? globalThis : unsafeWindow
+  } = {}) {
     checkStop();
     let block = document2.querySelector('[data-block-id="' + id + '"]');
     let source = findWhiteboardCanvas(block);
@@ -12453,8 +12544,17 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
       ({ block, source } = initial);
     }
     if (source && !withinImageLimits(source)) throw new Error("白板预览尺寸超过图片限制");
+    const native = await renderNativeWhiteboard(id, {
+      document: document2,
+      pageView,
+      checkStop,
+      background: backgroundOf(source, block),
+      waitForReady: async () => Boolean(await waitForStableCanvas(id, document2, wait2, checkStop))
+    });
+    if (native) return native;
     const plan = source && redrawPlan(block, source);
-    const limited = Boolean(plan);
+    const box = source.getBoundingClientRect();
+    const limited = Boolean(plan) || Math.min(source.width / box.width, source.height / box.height) < 2;
     if (plan && plan.scale > 1) {
       const style = plan.view.getAttribute("style");
       let image;
@@ -12733,7 +12833,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
   var ZERO_WIDTH3 = /[\u200b\u200c\u200d\u2060\ufeff]/gu;
   var CODE_ROW = ".code-line-wrapper[data-line-num]";
   var wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-  var CONTAINER_TYPES = /* @__PURE__ */ new Set(["page", "table", "code", "grid", "quote", "quote_container", "synced_reference"]);
+  var CONTAINER_TYPES = /* @__PURE__ */ new Set(["page", "table", "code", "grid", "quote", "quote_container", "synced_reference", "view"]);
   function semanticContent(html, cell = false) {
     const fragment = parseFragment(html);
     const tokens = [], texts = [];
@@ -13682,6 +13782,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
         "quote",
         "quote_container",
         "synced_reference",
+        "view",
         "callout",
         "divider",
         "todo",

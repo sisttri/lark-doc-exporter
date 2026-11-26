@@ -1,3 +1,5 @@
+import {renderNativeWhiteboard} from './whiteboard-native.js';
+
 const CONTENT_CANVAS = '.whiteboad-x-content-canvas canvas.whiteboad-x-normal-canvas';
 const BLOCK_VIEW = '.whiteboard-view-container.is-block';
 const STABLE_MS = 240;
@@ -119,7 +121,7 @@ function redrawPlan(block, source) {
     scale = Math.max(1,scale-1/Math.min(source.width,source.height));
   }
   return {view,scale,cssWidth:box.width*scale,cssHeight:box.height*scale,
-    width:Math.floor(source.width*scale),height:Math.floor(source.height*scale),
+    width:Math.floor(canvasBox.width*density*scale),height:Math.floor(canvasBox.height*density*scale),
     originalWidth:source.width,originalHeight:source.height,limited:density*scale < 2};
 }
 
@@ -153,7 +155,8 @@ function copyPreview(id, {source,block}, document, checkStop, limited) {
     alt:limited ? '白板静态预览（当前画面，清晰度受页面限制）' : '白板静态预览（当前画面）',dataUrl};
 }
 
-export async function captureWhiteboardPreview(id, {document = globalThis.document, wait, checkStop} = {}) {
+export async function captureWhiteboardPreview(id, {document = globalThis.document, wait, checkStop,
+  pageView = typeof unsafeWindow === 'undefined' ? globalThis : unsafeWindow} = {}) {
   checkStop();
   let block = document.querySelector('[data-block-id="' + id + '"]');
   let source = findWhiteboardCanvas(block);
@@ -163,8 +166,12 @@ export async function captureWhiteboardPreview(id, {document = globalThis.docume
     ({block,source} = initial);
   }
   if (source && !withinImageLimits(source)) throw new Error('白板预览尺寸超过图片限制');
+  const native = await renderNativeWhiteboard(id,{document,pageView,checkStop,background:backgroundOf(source,block),
+    waitForReady:async () => Boolean(await waitForStableCanvas(id,document,wait,checkStop))});
+  if (native) return native;
   const plan = source && redrawPlan(block,source);
-  const limited = Boolean(plan);
+  const box = source.getBoundingClientRect();
+  const limited = Boolean(plan) || Math.min(source.width/box.width,source.height/box.height) < 2;
   if (plan && plan.scale > 1) {
     const style = plan.view.getAttribute('style');
     let image;

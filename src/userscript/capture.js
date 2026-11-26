@@ -1,6 +1,6 @@
 // 飞书 Wiki 页面内采集逻辑（在油猴脚本的页面上下文中运行）。
-// 只读取当前页面已经渲染出的内容：DOM 文本、代码行、图片位图（canvas 复制）。
-// 不调用飞书接口/CLI，不额外发送网络请求。
+// 读取当前页面 DOM、已加载图片与画板场景，图形优先由本页本地渲染器输出。
+// 不自行调用飞书网络接口或 CLI，不上传文档内容。
 import { parseFragment, serialize } from "parse5";
 import { readDocumentSource } from './source.js';
 import { captureWhiteboardPreview, findWhiteboardCanvas, isWhiteboardReady } from './whiteboard.js';
@@ -12,7 +12,7 @@ export { readDocumentSource } from './source.js';
 const ZERO_WIDTH = /[\u200b\u200c\u200d\u2060\ufeff]/gu;
 const CODE_ROW = ".code-line-wrapper[data-line-num]";
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-const CONTAINER_TYPES = new Set(['page', 'table', 'code', 'grid', 'quote', 'quote_container', 'synced_reference']);
+const CONTAINER_TYPES = new Set(['page', 'table', 'code', 'grid', 'quote', 'quote_container', 'synced_reference', 'view']);
 
 // Compare supported content, not viewport positioning, editor selection or toolbar state.
 function semanticContent(html, cell = false) {
@@ -325,7 +325,7 @@ export async function capturePage({ stepRatio = 0.6, dwellMs, maxSteps = 400, on
       block.html = serialize(fragment);
     }
 
-    // 图片只复制页面已加载位图；源或像素尺寸变化后重新核对，不额外请求资源。
+    // 普通图片复制已加载位图，画板优先本页场景渲染；不自行请求原件。
     async function captureImage(id) {
       if (blocks.get(id)?.type === 'whiteboard') {
         try {
@@ -972,7 +972,7 @@ export async function capturePage({ stepRatio = 0.6, dwellMs, maxSteps = 400, on
     }
 
     const knownRootTypes = new Set(["heading1", "heading2", "heading3", "heading4", "heading5", "heading6", "text",
-      "bullet", "ordered", "code", "table", "image", "whiteboard", "quote", "quote_container", "synced_reference", "callout", "divider", "todo", "grid", "file"]);
+      "bullet", "ordered", "code", "table", "image", "whiteboard", "quote", "quote_container", "synced_reference", "view", "callout", "divider", "todo", "grid", "file"]);
     for (const type of new Set(roots.map((block) => block.type))) {
       if (!knownRootTypes.has(type)) warnings.push({ code: "unsupported_block", label: "未适配的块类型：" + type });
     }

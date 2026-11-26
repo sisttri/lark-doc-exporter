@@ -6,7 +6,7 @@ import {fileURLToPath} from 'node:url';
 // GM grants are supplied by the userscript manager rather than the web page.
 const config = {
   env:{es6:true, browser:true},
-  globals:{GM_registerMenuCommand:'readonly', GM_getResourceText:'readonly'},
+  globals:{GM_registerMenuCommand:'readonly', GM_getResourceText:'readonly', unsafeWindow:'readonly'},
   parserOptions:{ecmaVersion:2022, sourceType:'script', ecmaFeatures:{globalReturn:true}, allowAwaitOutsideFunction:true},
   rules:{
     curly:[1,'multi-line'], 'dot-location':0, 'dot-notation':[1,{allowKeywords:true}],

@@ -191,7 +191,7 @@ test('普通图位图创建期间取消也会释放位图而不交付素材', as
 test('白板内容canvas保存为PNG，排除辅助层、缩略图和隐藏或工具画布', async t => {
   const session = virtualWhiteboard(t,{decoys:true});
   const result = await capturePage({onProgress:session.onProgress});
-  assert.deepEqual(result.images,[{blockId:'board',mime:'image/png',width:64,height:32,alt:'白板静态预览（当前画面）',dataUrl:pngDataUrl}]);
+  assert.deepEqual(result.images,[{blockId:'board',mime:'image/png',width:64,height:32,alt:'白板静态预览（当前画面，清晰度受页面限制）',dataUrl:pngDataUrl}]);
   assert.deepEqual(session.draws,[[session.content,0,0]]);
   assert.deepEqual(session.fills,[{color:'#ffffff',args:[0,0,64,32]}]);
   assert.deepEqual(result.warnings,[]);
@@ -409,6 +409,36 @@ function virtualDocument(t, { unavailable = [], totalHeight = 2200, textIds, lin
     },
   };
 }
+
+test('view 附件容器只作为一个根块采集，子 file 不重复且不误报未支持或正文变化', async t => {
+  const session = virtualDocument(t,{textIds:[],totalHeight:400});
+  const doc = globalThis.document, page = doc.querySelector('.page-block');
+  const originalOne = doc.querySelector, originalAll = doc.querySelectorAll;
+  const markup = '<div data-block-id="3" data-block-type="file"><div class="file-icon">' +
+    '<svg width="48" height="48"><path/></svg></div><a href="https://example.org/report.pdf">报告.pdf</a></div>';
+  const view = {
+    parentElement:{closest:() => page},textContent:'报告.pdf',
+    outerHTML:'<div data-block-id="2" data-block-type="view">' + markup + '</div>',
+    getAttribute:key => ({'data-block-id':'2','data-block-type':'view'})[key] ?? null,
+    getBoundingClientRect:() => ({top:100-session.scroller.scrollTop,bottom:180-session.scroller.scrollTop,height:80}),
+    querySelectorAll:() => [],querySelector:() => null,
+  };
+  const file = {
+    ...view,parentElement:{closest:() => view},outerHTML:markup,
+    getAttribute:key => ({'data-block-id':'3','data-block-type':'file'})[key] ?? null,
+  };
+  doc.querySelector = selector => selector === '[data-block-id="2"]' ? view
+    : selector === '[data-block-id="3"]' ? file : originalOne(selector);
+  doc.querySelectorAll = selector => selector === '[data-block-id]' ? [page,view,file] : originalAll(selector);
+  const result = await capturePage({onProgress:session.onProgress});
+  assert.deepEqual(result.blocks.map(block => [block.id,block.type]), [['2','view']]);
+  assert.deepEqual(result.images,[]);
+  assert.deepEqual(result.warnings,[]);
+  const converted = convertCapture(result);
+  assert.equal((converted.html.match(/报告\.pdf/gu) || []).length,1);
+  assert.deepEqual(converted.warnings, [{code:'missing_attachment',label:'附件块 3 原件未采集，仅保留文件名和可用链接'}]);
+  assert.equal(session.scroller.scrollTop,session.originalTop);
+});
 
 test('补回虚拟代码块首三行、中间行和尾行，保留源行号和内容', async (t) => {
   const session = virtualDocument(t);

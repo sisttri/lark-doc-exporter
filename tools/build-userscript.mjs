@@ -158,6 +158,7 @@ const banner = [
   '// @noframes',
   '// @grant        GM_registerMenuCommand',
   '// @grant        GM_getResourceText',
+  '// @grant        unsafeWindow',
   '// @updateURL    https://raw.githubusercontent.com/sisttri/lark-doc-exporter/main/lark-doc-exporter.user.js',
   '// @downloadURL  https://raw.githubusercontent.com/sisttri/lark-doc-exporter/main/lark-doc-exporter.user.js',
   ...resourceMetadata,
