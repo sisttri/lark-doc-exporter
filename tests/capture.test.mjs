@@ -1406,7 +1406,7 @@ test('同步引用内嵌页面重建跨视口子标题，保留页壳和标题�
   assert.equal((converted.html.match(/<table\b/gu) || []).length, 1);
 });
 
-function virtualStructure(t, {kind='callout',missingSlot=false}={}) {
+function virtualStructure(t, {kind='callout',missingSlot=false,reverseColumns=false,missingColumn=false}={}) {
   const session=virtualDocument(t,{textIds:[],totalHeight:1500});
   const doc=globalThis.document,page=doc.querySelector('.page-block'),all=doc.querySelectorAll,one=doc.querySelector;
   const early=()=>session.scroller.scrollTop<400;
@@ -1429,7 +1429,7 @@ function virtualStructure(t, {kind='callout',missingSlot=false}={}) {
   if(kind==='grid') {
     column=element('3','grid_column',()=>root,()=>'<div data-block-id="3" data-block-type="grid_column"><div class="grid-column-block"><div class="render-unit-wrapper">'+visible().map(n=>n.outerHTML).join('')+'</div><span class="grid-column-percent">50%</span></div></div>',()=>visible().map(n=>n.textContent).join(''));
     other=element('6','grid_column',()=>root,()=>'<div data-block-id="6" data-block-type="grid_column"><div class="grid-column-block"><div class="render-unit-wrapper">'+right.outerHTML+'</div></div></div>',()=>right.textContent);
-    root=element('2','grid',()=>page,()=>'<div data-block-id="2" data-block-type="grid"><div class="grid-block"><div class="render-unit-wrapper">'+column.outerHTML+other.outerHTML+'</div></div></div>',()=>column.textContent+other.textContent);
+    root=element('2','grid',()=>page,()=>'<div data-block-id="2" data-block-type="grid"><div class="grid-block"><div class="render-unit-wrapper">'+(missingColumn?column.outerHTML:reverseColumns?other.outerHTML+column.outerHTML:column.outerHTML+other.outerHTML)+'</div></div></div>',()=>column.textContent+other.textContent);
   } else root=element('2','callout',()=>page,()=>'<div data-block-id="2" data-block-type="callout"><div class="ace-line"><span data-string="true">提示自身</span></div>'+(missingSlot?'<div>无法确认子块位置</div>':'<div class="callout-block-children"><div class="render-unit-wrapper">'+visible().map(n=>n.outerHTML).join('')+'</div></div>')+'</div>',()=> '提示自身'+visible().map(n=>n.textContent).join(''));
   const visibleNodes=()=>[page,root,...(kind==='grid'?[column,other]:[]),...visible(),...(kind==='grid'?[right]:[])];
   doc.querySelectorAll=selector=>selector==='[data-block-id]'?visibleNodes():all(selector);
@@ -1454,5 +1454,19 @@ test('Callout 未知子块位置保留自身文字并准确告警，不静默漏
   assert.ok(result.blocks[0].html.includes('提示自身'));
   assert.ok(!result.blocks[0].html.includes('先屏正文'));
   assert.ok(result.warnings.some(w=>w.code==='missing_block'&&w.label.includes('提示块')));
+  assert.equal(session.scroller.scrollTop,session.originalTop);
+});
+
+for(const missingColumn of [false,true]) test(missingColumn?'分栏缺少完整栏序时明确提示，不猜测追加其他栏':'分栏按实际 DOM 栏序重建，不按数字 ID 颠倒左右栏',async t=>{
+  const session=virtualStructure(t,{kind:'grid',reverseColumns:true,missingColumn});
+  const result=await capturePage({onProgress:session.onProgress});
+  const html=result.blocks[0].html;
+  if(missingColumn){
+    assert.ok(result.warnings.some(w=>w.code==='missing_block'&&w.label.includes('栏序')));
+    assert.ok(!html.includes('右栏正文'));
+  }else{
+    assert.ok(html.indexOf('右栏正文')<html.indexOf('先屏正文'));
+    assert.deepEqual(result.warnings,[]);
+  }
   assert.equal(session.scroller.scrollTop,session.originalTop);
 });

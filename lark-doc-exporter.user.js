@@ -13435,8 +13435,30 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
           warnings2.push({ code: "missing_block", label: childLabel(block) + block.id + " 的自身文字与子项容器混合，未能确认子项位置。" });
           return;
         }
-        const ordered = [...children];
-        if (ordered.every(hasNumericId)) ordered.sort((a, b) => Number(a.id) - Number(b.id));
+        let ordered = [...children];
+        if (block.type === "grid") {
+          let columnOrder = function(markup) {
+            const ids = [];
+            function visit(node) {
+              for (const child of node.childNodes || []) {
+                const id = child.attrs?.find((attr3) => attr3.name === "data-block-id")?.value;
+                if (id) ids.push(id);
+                else visit(child);
+              }
+            }
+            const region = findChildren(parseFragment(markup));
+            if (!region) return null;
+            visit(region);
+            return ids.length === byId.size && new Set(ids).size === ids.length && ids.every((id) => byId.has(id)) ? ids.map((id) => byId.get(id)) : null;
+          };
+          const byId = new Map(children.map((child) => [child.id, child]));
+          const columns = columnOrder(block.html) || columnOrder(block.observedHtml);
+          if (!columns) {
+            warnings2.push({ code: "missing_block", label: "分栏块 " + block.id + " 未能确认完整栏序，请核对各栏内容。" });
+            return;
+          }
+          ordered = columns;
+        } else if (ordered.every(hasNumericId)) ordered.sort((a, b) => Number(a.id) - Number(b.id));
         else ordered.sort((a, b) => (positions.get(a.id) ?? Infinity) - (positions.get(b.id) ?? Infinity));
         slot.childNodes = parseFragment(ordered.map((child) => child.html).join("")).childNodes;
         for (const child of slot.childNodes) child.parentNode = slot;
