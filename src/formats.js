@@ -1,6 +1,7 @@
 import { strToU8, zipSync } from 'fflate';
 import { visibleTags, webLink } from './importer.js';
 import { safeStem, warningLabel } from './shared.js';
+import { cellStyleText, columnGroupHtml, normalizeColor, normalizeColumnWidths } from './table-style.js';
 
 const zipOptions = { level: 1, mtime: new Date(2000, 0, 1) };
 const rasterTypes = new Set(['image/png', 'image/jpeg', 'image/gif', 'image/webp']);
@@ -75,11 +76,12 @@ function visitedAssets(nodes, paths = new Set()) {
   return paths;
 }
 
-function htmlNodes(nodes, lookup, embedded, account = (markup) => markup, presentation) {
+function htmlNodes(nodes, lookup, embedded, account = (markup) => markup, presentation, cellColor) {
   return nodes.map((node) => {
     if (typeof node === 'string') return account(escapeHtml(node));
     const { tag, children = [] } = node;
-    if (!visibleTags.has(tag)) return htmlNodes(children, lookup, embedded, account, presentation);
+    if (!visibleTags.has(tag)) return htmlNodes(children, lookup, embedded, account, presentation, cellColor);
+    const childCellColor = tag === 'td' || tag === 'th' ? normalizeColor(node.color) || cellColor : cellColor;
     const asset = lookup.get(node.path);
     if (tag === 'img') {
       if (!rasterTypes.has(asset?.type) || asset.role !== 'image') return account('[缺少图片]');
@@ -96,22 +98,28 @@ function htmlNodes(nodes, lookup, embedded, account = (markup) => markup, presen
       } else if (node.href && webLink(node.href)) {
         attrs = ' href="' + escapeHtml(webLink(node.href)) + '" rel="noopener noreferrer"';
       } else {
-        return htmlNodes(children, lookup, embedded, account, presentation);
+        return htmlNodes(children, lookup, embedded, account, presentation, cellColor);
       }
+      if (cellColor) attrs += ' style="color:inherit"';
     }
     if (tag === 'td' || tag === 'th') {
       for (const name of ['colspan', 'rowspan']) {
         const value = node[name];
         if (Number.isInteger(value) && value >= 2 && value <= 64) attrs += ' ' + name + '="' + value + '"';
       }
+      const style = cellStyleText(node);
+      if (style) attrs += ' style="' + style + '"';
     }
+    const columns = tag === 'table' ? columnGroupHtml(node.columnWidths) : '';
+    if (columns) attrs += ' style="table-layout:fixed;width:100%;overflow-wrap:anywhere"';
     if (tag === 'ol' && Number.isInteger(node.start)) attrs = ' start="' + node.start + '"';
     if (tag === 'code' && /^[a-z0-9][a-z0-9-]{0,31}$/u.test(node.language ?? '')) {
       attrs = ' class="language-' + node.language + '"';
     }
+    if (tag === 'pre' && cellColor) attrs += ' style="color:inherit;background:transparent"';
     if (presentation?.headings.has(node)) attrs += ' id="' + presentation.headings.get(node) + '"';
     const opening = account((tag === 'table' && presentation ? '<div class="table-scroll">' : '') + '<' + tag + attrs + '>');
-    let contents = htmlNodes(children, lookup, embedded, account, presentation);
+    let contents = (columns ? account(columns) : '') + htmlNodes(children, lookup, embedded, account, presentation, childCellColor);
     if (tag === 'pre' && typeof children[0] === 'string' && children[0].startsWith('\n')) {
       contents = account('\n') + contents;
     }
@@ -276,7 +284,8 @@ function markdownTable(table, lookup) {
   const sections = onlyElements(table);
   const rows = sections.flatMap((node) => node.tag === 'tr' ? [node] : onlyElements(node));
   const cells = rows.map(onlyElements);
-  if (sections.some((node) => !['tr', 'thead', 'tbody', 'tfoot'].includes(node.tag)) ||
+  if (normalizeColumnWidths(table.columnWidths) || cells.some(row => row.some(cell => cellStyleText(cell))) ||
+    sections.some((node) => !['tr', 'thead', 'tbody', 'tfoot'].includes(node.tag)) ||
     rows.some((node) => node.tag !== 'tr') ||
     !cells[0]?.length || cells[0].some(({ tag }) => tag !== 'th') ||
     cells.slice(1).some((row) => row.some(({ tag }) => tag !== 'td')) ||

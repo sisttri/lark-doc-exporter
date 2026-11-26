@@ -726,6 +726,59 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
           function warningLabel2(code) {
             return warnings2[code] || "内容已简化";
           }
+          var horizontal2 = /* @__PURE__ */ new Set(["left", "center", "right", "justify"]);
+          var vertical2 = /* @__PURE__ */ new Set(["top", "middle", "bottom"]);
+          function normalizeAlign2(value) {
+            const text = typeof value === "string" ? value.trim().toLowerCase() : "";
+            return horizontal2.has(text) ? text : void 0;
+          }
+          function normalizeValign2(value) {
+            const text = typeof value === "string" ? value.trim().toLowerCase() : "";
+            return vertical2.has(text) ? text : void 0;
+          }
+          function normalizeColor2(value) {
+            if (typeof value !== "string" || value.length > 64) return;
+            const text = value.trim().toLowerCase();
+            if (/^#[\da-f]{6}$/u.test(text)) return text;
+            if (/^#[\da-f]{3}$/u.test(text)) return "#" + [...text.slice(1)].map((char) => char + char).join("");
+            const rgb = /^rgb\(\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})\s*\)$/u.exec(text) || /^rgba\(\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*1(?:\.0+)?\s*\)$/u.exec(text);
+            if (rgb && rgb.slice(1).every((channel) => Number(channel) <= 255)) {
+              return "#" + rgb.slice(1).map((channel) => Number(channel).toString(16).padStart(2, "0")).join("");
+            }
+          }
+          function normalizeCellStyle2(fields = {}) {
+            const result = {};
+            for (const field of ["background", "color"]) {
+              const value = normalizeColor2(fields?.[field]);
+              if (value) result[field] = value;
+            }
+            const align = normalizeAlign2(fields?.align), valign = normalizeValign2(fields?.valign);
+            if (align) result.align = align;
+            if (valign) result.valign = valign;
+            return result;
+          }
+          function normalizeColumnWidths2(values) {
+            if (!Array.isArray(values) || !values.length || values.length > 64 || !values.every((value) => typeof value === "number" && Number.isFinite(value) && value > 0)) return;
+            if (values.every(Number.isInteger) && values.reduce((sum, value) => sum + value, 0) === 1e4) return values.slice();
+            const maximum = Math.max(...values);
+            const weights = values.map((value) => value / maximum);
+            const total = weights.reduce((sum, value) => sum + value, 0);
+            const exact = weights.map((value) => value * 1e4 / total);
+            const widths = exact.map((value) => Math.max(1, Math.floor(value)));
+            let remaining = 1e4 - widths.reduce((sum, value) => sum + value, 0);
+            const order = exact.map((value, index) => index).sort((a, b) => remaining >= 0 ? exact[b] % 1 - exact[a] % 1 || a - b : widths[b] - widths[a] || a - b);
+            for (const index of order) {
+              if (remaining > 0) {
+                widths[index]++;
+                remaining--;
+              } else if (remaining < 0) {
+                const removed = Math.min(-remaining, widths[index] - 1);
+                widths[index] -= removed;
+                remaining += removed;
+              }
+            }
+            return widths;
+          }
           var INLINE = /* @__PURE__ */ new Set(["a", "span", "strong", "b", "em", "i", "s", "del", "strike", "small", "u", "code", "mark", "sub", "sup", "br"]);
           var SECTIONS = /* @__PURE__ */ new Set(["thead", "tbody", "tfoot"]);
           var MiB2 = 1024 * 1024;
@@ -858,7 +911,27 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
           function boundLongTokens(value) {
             return value.replace(/[^\s\u200b\u3000-\u9fff]{128,}/gu, (token) => token.match(/.{1,64}/gu).join("​"));
           }
-          function columnWidths(grid, count, availableWidth) {
+          function columnWidths(grid, count, availableWidth, hints) {
+            const source = normalizeColumnWidths2(hints);
+            if (source?.length === count) {
+              const padding = source.map((_, index) => (index ? COLUMN_GAP / 2 : 0) + (index < count - 1 ? COLUMN_GAP / 2 : 0));
+              const widths = Array(count);
+              let pending = source.map((_, index) => index), remaining2 = availableWidth, total = 1e4;
+              while (pending.length) {
+                const narrow = pending.filter((index) => remaining2 * source[index] / total - padding[index] < MIN_COLUMN_WIDTH);
+                if (!narrow.length) {
+                  for (const index of pending) widths[index] = remaining2 * source[index] / total - padding[index];
+                  break;
+                }
+                for (const index of narrow) {
+                  widths[index] = MIN_COLUMN_WIDTH;
+                  remaining2 -= MIN_COLUMN_WIDTH + padding[index];
+                  total -= source[index];
+                }
+                pending = pending.filter((index) => widths[index] === void 0);
+              }
+              return widths;
+            }
             const weights = Array(count).fill(1);
             function contentUnits(node) {
               let longest = 0, line = 0;
@@ -888,7 +961,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
             checkedSize(snapshot);
             let denseTables = 0;
             const textLine = (str, add = {}) => ({ text: boundLongTokens(str), ...add });
-            function sequence(nodes, availableWidth, fontSize) {
+            function sequence(nodes, availableWidth, fontSize, cellColor) {
               const out = [], buffer = [];
               function flush() {
                 if (buffer.length) out.push({ text: buffer.splice(0) });
@@ -916,7 +989,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
                       out.push({ image: id, fit, margin: [0, 3, 0, 3] });
                     }
                   }
-                  if (node.alt || !id) out.push(textLine(node.alt || "图片无法排版", { fontSize: 9, color: "#596960" }));
+                  if (node.alt || !id) out.push(textLine(node.alt || "图片无法排版", { fontSize: 9, color: cellColor ?? "#596960" }));
                   return;
                 }
                 if (INLINE.has(tag)) {
@@ -928,21 +1001,21 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
                   if (tag === "u") next.decoration = withDecoration(style.decoration, "underline");
                   if (tag === "a" && /^(?:https?:\/\/|mailto:)/i.test(node.href || "")) {
                     next.link = node.href;
-                    next.color = "#155e50";
+                    next.color = cellColor ?? "#155e50";
                     next.decoration = withDecoration(style.decoration, "underline");
                   }
-                  if (tag === "code") next.background = "#edf1ee";
+                  if (tag === "code" && !cellColor) next.background = "#edf1ee";
                   (node.children || []).forEach((child) => walk(child, next));
                   return;
                 }
                 flush();
-                out.push(block(node, availableWidth, fontSize));
+                out.push(block(node, availableWidth, fontSize, cellColor));
               }
               nodes.forEach((node) => walk(node, {}));
               flush();
               return out.length ? out : [{ text: "" }];
             }
-            function table(node, availableWidth, fontSize) {
+            function table(node, availableWidth, fontSize, cellColor) {
               const rows = tableRows(node);
               if (!rows.length) return textLine("");
               const rowCells = rows.map(({ node: node2 }) => (node2.children || []).filter((cell) => cell.tag === "td" || cell.tag === "th"));
@@ -966,20 +1039,25 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
                 }
               }
               if (!width) return textLine("");
-              const columnWidth = (availableWidth - (width - 1) * COLUMN_GAP) / width;
-              if (columnWidth < MIN_COLUMN_WIDTH) return flatTable();
-              const widths = columnWidths(grid, width, availableWidth);
+              const columnWidth2 = (availableWidth - (width - 1) * COLUMN_GAP) / width;
+              if (columnWidth2 < MIN_COLUMN_WIDTH) return flatTable();
+              const widths = columnWidths(grid, width, availableWidth, node.columnWidths);
               if (headers >= rows.length) headers = 0;
               const body = grid.map((row) => Array.from({ length: width }, (_, index) => {
                 const entry = row[index];
                 if (!entry) return { text: "" };
                 if (!entry.cell) return {};
                 const { cell, colSpan, rowSpan } = entry;
+                const style = normalizeCellStyle2(cell);
+                const color2 = style.color ?? cellColor;
                 const cellWidth = widths.slice(index, index + colSpan).reduce((sum, value) => sum + value, 0) + (colSpan - 1) * COLUMN_GAP;
                 return {
-                  stack: sequence(cell.children || [], cellWidth, 9),
+                  stack: sequence(cell.children || [], cellWidth, 9, color2),
                   bold: cell.tag === "th",
-                  fillColor: cell.tag === "th" ? "#e5eee8" : void 0,
+                  fillColor: style.background ?? (cell.tag === "th" && !cellColor ? "#e5eee8" : void 0),
+                  color: color2,
+                  alignment: style.align,
+                  verticalAlignment: style.valign,
                   colSpan,
                   rowSpan
                 };
@@ -989,22 +1067,22 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
                 denseTables++;
                 const stack = rowCells.map((cells) => {
                   const nodes = cells.flatMap((cell, index) => [...index ? ["　｜　"] : [], ...cell.children || []]);
-                  return { stack: sequence(nodes, availableWidth, fontSize), margin: [0, 0, 0, 4] };
+                  return { stack: sequence(nodes, availableWidth, fontSize, cellColor), margin: [0, 0, 0, 4] };
                 });
                 return { stack, margin: [0, 4, 0, 6] };
               }
             }
-            function block(node, availableWidth, fontSize) {
+            function block(node, availableWidth, fontSize, cellColor) {
               const tag = node.tag, kids = node.children || [];
               if (isHeading(tag)) {
                 const level = Number(tag[1]);
                 const headingSize = [22, 17, 14, 12, 11, 10][level - 1];
-                return { stack: sequence(kids, availableWidth, headingSize), bold: true, fontSize: headingSize, margin: [0, 8, 0, 4], headlineLevel: level };
+                return { stack: sequence(kids, availableWidth, headingSize, cellColor), bold: true, fontSize: headingSize, margin: [0, 8, 0, 4], headlineLevel: level };
               }
               if (tag === "table") {
                 const caption = kids.find((k) => k.tag === "caption");
-                const content2 = table(node, availableWidth, fontSize);
-                return caption ? { stack: [{ stack: sequence(caption.children || [], availableWidth, fontSize), bold: true }, content2] } : content2;
+                const content2 = table(node, availableWidth, fontSize, cellColor);
+                return caption ? { stack: [{ stack: sequence(caption.children || [], availableWidth, fontSize, cellColor), bold: true }, content2] } : content2;
               }
               if (tag === "ul" || tag === "ol") {
                 const items = kids.filter((x2) => x2.tag === "li");
@@ -1016,12 +1094,12 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
                 if (itemWidth < MIN_COLUMN_WIDTH) return {
                   stack: items.map((item, index) => ({ stack: [
                     textLine(tag === "ol" ? start + index + "." : "•"),
-                    ...sequence(item.children || [], availableWidth, fontSize)
+                    ...sequence(item.children || [], availableWidth, fontSize, cellColor)
                   ] })),
                   margin
                 };
                 return {
-                  [tag]: items.map((item) => ({ stack: sequence(item.children || [], itemWidth, fontSize) })),
+                  [tag]: items.map((item) => ({ stack: sequence(item.children || [], itemWidth, fontSize, cellColor) })),
                   ...tag === "ol" ? { start } : {},
                   margin
                 };
@@ -1034,14 +1112,14 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
                   preserveLeadingSpaces: true,
                   fontSize: 9,
                   margin: [Math.min(6, availableWidth - MIN_COLUMN_WIDTH), 4, 0, 5],
-                  color: "#314d40"
+                  color: cellColor ?? "#314d40"
                 };
               }
               if (tag === "blockquote") {
                 const indent = Math.min(14, availableWidth - MIN_COLUMN_WIDTH);
-                return { stack: sequence(kids, availableWidth - indent, fontSize), margin: [indent, 4, 0, 5], color: "#4b6057" };
+                return { stack: sequence(kids, availableWidth - indent, fontSize, cellColor), margin: [indent, 4, 0, 5], color: cellColor ?? "#4b6057" };
               }
-              return { stack: sequence(kids, availableWidth, fontSize), margin: [0, 1, 0, 3] };
+              return { stack: sequence(kids, availableWidth, fontSize, cellColor), margin: [0, 1, 0, 3] };
             }
             const content = sequence(snapshot.blocks, PAGE_WIDTH, 10);
             function matchesTitle(node) {
@@ -2774,9 +2852,9 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
     [TAG_NAMES.WBR, TAG_ID.WBR],
     [TAG_NAMES.XMP, TAG_ID.XMP]
   ]);
-  function getTagID(tagName) {
+  function getTagID(tagName2) {
     var _a3;
-    return (_a3 = TAG_NAME_TO_ID.get(tagName)) !== null && _a3 !== void 0 ? _a3 : TAG_ID.UNKNOWN;
+    return (_a3 = TAG_NAME_TO_ID.get(tagName2)) !== null && _a3 !== void 0 ? _a3 : TAG_ID.UNKNOWN;
   }
   var $ = TAG_ID;
   var SPECIAL_ELEMENTS = {
@@ -5597,10 +5675,10 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
         this.handler.onItemPush(this.current, this.currentTagId, insertionIdx === this.stackTop);
       }
     }
-    popUntilTagNamePopped(tagName) {
+    popUntilTagNamePopped(tagName2) {
       let targetIdx = this.stackTop + 1;
       do {
-        targetIdx = this.tagIDs.lastIndexOf(tagName, targetIdx - 1);
+        targetIdx = this.tagIDs.lastIndexOf(tagName2, targetIdx - 1);
       } while (targetIdx > 0 && this.treeAdapter.getNamespaceURI(this.items[targetIdx]) !== NS.HTML);
       this.shortenToLength(Math.max(targetIdx, 0));
     }
@@ -5683,12 +5761,12 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
       return this.stackTop === 0 && this.tagIDs[0] === TAG_ID.HTML;
     }
     //Element in scope
-    hasInDynamicScope(tagName, htmlScope) {
+    hasInDynamicScope(tagName2, htmlScope) {
       for (let i = this.stackTop; i >= 0; i--) {
         const tn = this.tagIDs[i];
         switch (this.treeAdapter.getNamespaceURI(this.items[i])) {
           case NS.HTML: {
-            if (tn === tagName)
+            if (tn === tagName2)
               return true;
             if (htmlScope.has(tn))
               return false;
@@ -5708,14 +5786,14 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
       }
       return true;
     }
-    hasInScope(tagName) {
-      return this.hasInDynamicScope(tagName, SCOPING_ELEMENTS_HTML);
+    hasInScope(tagName2) {
+      return this.hasInDynamicScope(tagName2, SCOPING_ELEMENTS_HTML);
     }
-    hasInListItemScope(tagName) {
-      return this.hasInDynamicScope(tagName, SCOPING_ELEMENTS_HTML_LIST);
+    hasInListItemScope(tagName2) {
+      return this.hasInDynamicScope(tagName2, SCOPING_ELEMENTS_HTML_LIST);
     }
-    hasInButtonScope(tagName) {
-      return this.hasInDynamicScope(tagName, SCOPING_ELEMENTS_HTML_BUTTON);
+    hasInButtonScope(tagName2) {
+      return this.hasInDynamicScope(tagName2, SCOPING_ELEMENTS_HTML_BUTTON);
     }
     hasNumberedHeaderInScope() {
       for (let i = this.stackTop; i >= 0; i--) {
@@ -5742,13 +5820,13 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
       }
       return true;
     }
-    hasInTableScope(tagName) {
+    hasInTableScope(tagName2) {
       for (let i = this.stackTop; i >= 0; i--) {
         if (this.treeAdapter.getNamespaceURI(this.items[i]) !== NS.HTML) {
           continue;
         }
         switch (this.tagIDs[i]) {
-          case tagName: {
+          case tagName2: {
             return true;
           }
           case TAG_ID.TABLE:
@@ -5778,13 +5856,13 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
       }
       return true;
     }
-    hasInSelectScope(tagName) {
+    hasInSelectScope(tagName2) {
       for (let i = this.stackTop; i >= 0; i--) {
         if (this.treeAdapter.getNamespaceURI(this.items[i]) !== NS.HTML) {
           continue;
         }
         switch (this.tagIDs[i]) {
-          case tagName: {
+          case tagName2: {
             return true;
           }
           case TAG_ID.OPTION:
@@ -5912,8 +5990,8 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
       }
     }
     //Search
-    getElementEntryInScopeWithTagName(tagName) {
-      const entry = this.entries.find((entry2) => entry2.type === EntryType.Marker || this.treeAdapter.getTagName(entry2.element) === tagName);
+    getElementEntryInScopeWithTagName(tagName2) {
+      const entry = this.entries.find((entry2) => entry2.type === EntryType.Marker || this.treeAdapter.getTagName(entry2.element) === tagName2);
       return entry && entry.type === EntryType.Element ? entry : null;
     }
     getElementEntry(element) {
@@ -5937,10 +6015,10 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
         childNodes: []
       };
     },
-    createElement(tagName, namespaceURI, attrs) {
+    createElement(tagName2, namespaceURI, attrs) {
       return {
-        nodeName: tagName,
-        tagName,
+        nodeName: tagName2,
+        tagName: tagName2,
         attrs,
         namespaceURI,
         childNodes: [],
@@ -6026,7 +6104,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
       }
     },
     adoptAttributes(recipient, attrs) {
-      const recipientAttrsMap = new Set(recipient.attrs.map((attr2) => attr2.name));
+      const recipientAttrsMap = new Set(recipient.attrs.map((attr3) => attr3.name));
       for (let j = 0; j < attrs.length; j++) {
         if (!recipientAttrsMap.has(attrs[j].name)) {
           recipient.attrs.push(attrs[j]);
@@ -6268,7 +6346,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
     "xChannelSelector",
     "yChannelSelector",
     "zoomAndPan"
-  ].map((attr2) => [attr2.toLowerCase(), attr2]));
+  ].map((attr3) => [attr3.toLowerCase(), attr3]));
   var XML_ATTRS_ADJUSTMENT_MAP = /* @__PURE__ */ new Map([
     ["xlink:actuate", { prefix: "xlink", name: "actuate", namespace: NS.XLINK }],
     ["xlink:arcrole", { prefix: "xlink", name: "arcrole", namespace: NS.XLINK }],
@@ -6684,8 +6762,8 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
       this.openElements.push(element, token.tagID);
     }
     /** @protected */
-    _insertFakeElement(tagName, tagID) {
-      const element = this.treeAdapter.createElement(tagName, NS.HTML, []);
+    _insertFakeElement(tagName2, tagID) {
+      const element = this.treeAdapter.createElement(tagName2, NS.HTML, []);
       this._attachElementToTree(element, null);
       this.openElements.push(element, tagID);
     }
@@ -9438,9 +9516,9 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
         p._endTagOutsideForeignContent(token);
         break;
       }
-      const tagName = p.treeAdapter.getTagName(element);
-      if (tagName.toLowerCase() === token.tagName) {
-        token.tagName = tagName;
+      const tagName2 = p.treeAdapter.getTagName(element);
+      if (tagName2.toLowerCase() === token.tagName) {
+        token.tagName = tagName2;
         p.openElements.shortenToLength(i);
         break;
       }
@@ -9514,6 +9592,10 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
     }
     return serializeChildNodes(node, opts);
   }
+  function serializeOuter(node, options) {
+    const opts = { ...defaultOpts, ...options };
+    return serializeNode(node, opts);
+  }
   function serializeChildNodes(parentNode, options) {
     let html = "";
     const container = options.treeAdapter.isElementNode(parentNode) && options.treeAdapter.getTagName(parentNode) === TAG_NAMES.TEMPLATE && options.treeAdapter.getNamespaceURI(parentNode) === NS.HTML ? options.treeAdapter.getTemplateContent(parentNode) : parentNode;
@@ -9546,33 +9628,33 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
   }
   function serializeAttributes(node, { treeAdapter }) {
     let html = "";
-    for (const attr2 of treeAdapter.getAttrList(node)) {
+    for (const attr3 of treeAdapter.getAttrList(node)) {
       html += " ";
-      if (attr2.namespace) {
-        switch (attr2.namespace) {
+      if (attr3.namespace) {
+        switch (attr3.namespace) {
           case NS.XML: {
-            html += `xml:${attr2.name}`;
+            html += `xml:${attr3.name}`;
             break;
           }
           case NS.XMLNS: {
-            if (attr2.name !== "xmlns") {
+            if (attr3.name !== "xmlns") {
               html += "xmlns:";
             }
-            html += attr2.name;
+            html += attr3.name;
             break;
           }
           case NS.XLINK: {
-            html += `xlink:${attr2.name}`;
+            html += `xlink:${attr3.name}`;
             break;
           }
           default: {
-            html += `${attr2.prefix}:${attr2.name}`;
+            html += `${attr3.prefix}:${attr3.name}`;
           }
         }
       } else {
-        html += attr2.name;
+        html += attr3.name;
       }
-      html += `="${escapeAttribute(attr2.value)}"`;
+      html += `="${escapeAttribute(attr3.value)}"`;
     }
     return html;
   }
@@ -9635,6 +9717,192 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
   };
   function warningLabel(code) {
     return warnings[code] || "内容已简化";
+  }
+
+  // src/table-style.js
+  var horizontal = /* @__PURE__ */ new Set(["left", "center", "right", "justify"]);
+  var vertical = /* @__PURE__ */ new Set(["top", "middle", "bottom"]);
+  function normalizeAlign(value) {
+    const text = typeof value === "string" ? value.trim().toLowerCase() : "";
+    return horizontal.has(text) ? text : void 0;
+  }
+  function normalizeValign(value) {
+    const text = typeof value === "string" ? value.trim().toLowerCase() : "";
+    return vertical.has(text) ? text : void 0;
+  }
+  function normalizeColor(value) {
+    if (typeof value !== "string" || value.length > 64) return;
+    const text = value.trim().toLowerCase();
+    if (/^#[\da-f]{6}$/u.test(text)) return text;
+    if (/^#[\da-f]{3}$/u.test(text)) return "#" + [...text.slice(1)].map((char) => char + char).join("");
+    const rgb = /^rgb\(\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})\s*\)$/u.exec(text) || /^rgba\(\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*1(?:\.0+)?\s*\)$/u.exec(text);
+    if (rgb && rgb.slice(1).every((channel) => Number(channel) <= 255)) {
+      return "#" + rgb.slice(1).map((channel) => Number(channel).toString(16).padStart(2, "0")).join("");
+    }
+  }
+  function normalizeCellStyle(fields = {}) {
+    const result = {};
+    for (const field of ["background", "color"]) {
+      const value = normalizeColor(fields?.[field]);
+      if (value) result[field] = value;
+    }
+    const align = normalizeAlign(fields?.align), valign = normalizeValign(fields?.valign);
+    if (align) result.align = align;
+    if (valign) result.valign = valign;
+    return result;
+  }
+  function declarations(style, validators) {
+    const result = /* @__PURE__ */ new Map();
+    if (typeof style !== "string") return result;
+    for (const declaration of style.split(";")) {
+      const colon = declaration.indexOf(":");
+      if (colon < 0) continue;
+      const name = declaration.slice(0, colon).trim().toLowerCase();
+      let value = declaration.slice(colon + 1).trim();
+      if (validators) {
+        if (!Object.hasOwn(validators, name)) continue;
+        value = validators[name](value);
+        if (value === void 0) continue;
+      }
+      result.set(name, value);
+    }
+    return result;
+  }
+  function readCellStyle(style, legacy = {}) {
+    const values = declarations(style, {
+      "background-color": normalizeColor,
+      color: normalizeColor,
+      "text-align": normalizeAlign,
+      "vertical-align": normalizeValign
+    });
+    return normalizeCellStyle({
+      background: values.get("background-color") ?? legacy.bgcolor,
+      color: values.get("color"),
+      align: values.get("text-align") ?? legacy.align,
+      valign: values.get("vertical-align") ?? legacy.valign
+    });
+  }
+  function cellStyleText(fields) {
+    const style = normalizeCellStyle(fields);
+    return [["background", "background-color"], ["color", "color"], ["align", "text-align"], ["valign", "vertical-align"]].flatMap(([field, property]) => style[field] ? [property + ":" + style[field]] : []).join(";");
+  }
+  function normalizeColumnWidths(values) {
+    if (!Array.isArray(values) || !values.length || values.length > 64 || !values.every((value) => typeof value === "number" && Number.isFinite(value) && value > 0)) return;
+    if (values.every(Number.isInteger) && values.reduce((sum, value) => sum + value, 0) === 1e4) return values.slice();
+    const maximum = Math.max(...values);
+    const weights = values.map((value) => value / maximum);
+    const total = weights.reduce((sum, value) => sum + value, 0);
+    const exact = weights.map((value) => value * 1e4 / total);
+    const widths = exact.map((value) => Math.max(1, Math.floor(value)));
+    let remaining = 1e4 - widths.reduce((sum, value) => sum + value, 0);
+    const order = exact.map((value, index) => index).sort((a, b) => remaining >= 0 ? exact[b] % 1 - exact[a] % 1 || a - b : widths[b] - widths[a] || a - b);
+    for (const index of order) {
+      if (remaining > 0) {
+        widths[index]++;
+        remaining--;
+      } else if (remaining < 0) {
+        const removed = Math.min(-remaining, widths[index] - 1);
+        widths[index] -= removed;
+        remaining += removed;
+      }
+    }
+    return widths;
+  }
+  function attr(node, name) {
+    if (typeof node?.getAttribute === "function") return node.getAttribute(name) ?? "";
+    return node?.attrs?.find((item) => item.name === name && !item.namespace)?.value ?? "";
+  }
+  function isAuxiliaryTable(node) {
+    if (!node) return false;
+    if (typeof node?.classList?.contains === "function") return node.classList.contains("sticky-row-wrapper");
+    return attr(node, "class").split(/\s+/u).includes("sticky-row-wrapper");
+  }
+  var tagName = (node) => (node?.localName || node?.tagName || "").toLowerCase();
+  var elementChildren = (node) => node?.children ? [...node.children] : (node?.childNodes ?? []).filter((child) => tagName(child));
+  function directTableRows(table) {
+    const rows = [];
+    for (const group of elementChildren(table)) {
+      const section = tagName(group);
+      if (section === "tr") rows.push({ row: group, section: "tbody", group: table, auxiliary: false });
+      else if (["thead", "tbody", "tfoot"].includes(section)) {
+        for (const row of elementChildren(group)) if (tagName(row) === "tr") rows.push({ row, section, group, auxiliary: false });
+      }
+    }
+    if (!rows.length && table?.rows) for (const row of table.rows) {
+      const group = row.parentElement || table, section = tagName(group);
+      rows.push({ row, section: ["thead", "tfoot"].includes(section) ? section : "tbody", group, auxiliary: false });
+    }
+    return rows;
+  }
+  function cellText(node) {
+    if (tagName(node) === "table") return "";
+    if (node.nodeName === "#text") return node.value ?? node.nodeValue ?? "";
+    if (node.childNodes?.length) return [...node.childNodes].map(cellText).join("");
+    return typeof node.textContent === "string" ? node.textContent : "";
+  }
+  function sameTableRow(first, second) {
+    const cells = (row) => row.cells ? [...row.cells] : elementChildren(row).filter((cell) => ["td", "th"].includes(tagName(cell)));
+    const left = cells(first), right = cells(second);
+    return left.length > 0 && left.length === right.length && left.every((cell, index) => {
+      const other = right[index];
+      if (["colspan", "rowspan"].some((span2) => (Number(attr(cell, span2)) || 1) !== (Number(attr(other, span2)) || 1))) return false;
+      const id = attr(cell, "data-block-id"), otherId = attr(other, "data-block-id");
+      if (id && otherId) return id === otherId;
+      const text = (value) => cellText(value).replace(/[\u200b\ufeff\u2060]/gu, "").replace(/\s+/gu, " ").trim();
+      return text(cell) === text(other);
+    });
+  }
+  function logicalTableRows(block, main) {
+    if (!main) return [];
+    const rows = directTableRows(main);
+    if (elementChildren(main).some((group) => tagName(group) === "thead") || rows.some((row) => row.section === "thead")) return rows;
+    const headerTables = [];
+    function visit(node) {
+      if (node === main) return;
+      if (tagName(node) === "table") {
+        if (isAuxiliaryTable(node)) {
+          const entries = directTableRows(node);
+          if (!headerTables.some((previous) => previous.length === entries.length && previous.every((entry, index) => sameTableRow(entry.row, entries[index].row)))) headerTables.push(entries);
+        }
+        return;
+      }
+      for (const child of elementChildren(node)) visit(child);
+    }
+    visit(block);
+    const headers = headerTables.flatMap((entries) => entries.map((entry) => ({ ...entry, section: "thead", auxiliary: true })));
+    let duplicate = 0;
+    while (duplicate < headers.length && duplicate < rows.length && sameTableRow(headers[duplicate].row, rows[duplicate].row)) duplicate++;
+    return [...rows.slice(0, duplicate).map((entry) => ({ ...entry, section: "thead" })), ...headers.slice(duplicate), ...rows.slice(duplicate)];
+  }
+  function parseWidth(value) {
+    const match = /^(\d+(?:\.\d+)?|\.\d+)\s*(px|%)?$/iu.exec(value.trim());
+    if (match && Number(match[1]) > 0 && Number.isFinite(Number(match[1]))) {
+      return { value: Number(match[1]), unit: match[2]?.toLowerCase() || "px" };
+    }
+  }
+  function columnWidth(node) {
+    return declarations(attr(node, "style"), { width: parseWidth }).get("width") || parseWidth(attr(node, "width"));
+  }
+  function readTableColumnWidths(table) {
+    const values = [];
+    let unit;
+    for (const group of table.childNodes ?? []) {
+      if (group.tagName !== "colgroup") continue;
+      const columns = (group.childNodes ?? []).filter((node) => node.tagName === "col");
+      for (const column of columns.length ? columns : [group]) {
+        const width = columnWidth(column) || (column !== group ? columnWidth(group) : void 0);
+        const rawSpan = attr(column, "span");
+        const span2 = rawSpan === "" ? 1 : /^\d{1,2}$/u.test(rawSpan) ? Number(rawSpan) : 0;
+        if (!width || span2 < 1 || span2 > 64 || values.length + span2 > 64 || unit && width.unit !== unit) return;
+        unit = width.unit;
+        values.push(...Array(span2).fill(width.value));
+      }
+    }
+    return normalizeColumnWidths(values);
+  }
+  function columnGroupHtml(values) {
+    const widths = normalizeColumnWidths(values);
+    return widths ? "<colgroup>" + widths.map((width) => '<col style="width:' + width / 100 + '%">').join("") + "</colgroup>" : "";
   }
 
   // src/feishu.js
@@ -9702,6 +9970,32 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
   }
   function isHidden(node) {
     return node.attrs?.some(({ name, value }) => name === "hidden" || name === "aria-hidden" && value === "true") || /(?:^|;)\s*(?:display\s*:\s*none|visibility\s*:\s*hidden)(?:\s*!important)?\s*(?:;|$)/iu.test(nodeAttr(node, "style")) || ["doc-cover-toolbar", "docx-popup-container", "layer-popup"].some((name) => hasClass(node, name));
+  }
+  function hasFinalDisplayNone(style) {
+    if (/\\|\/\*/u.test(style)) return false;
+    let display = "", important = false, start = 0, depth = 0, quote = "";
+    for (let index = 0; index <= style.length; index++) {
+      const char = style[index];
+      if (quote) {
+        if (char === quote) quote = "";
+        continue;
+      }
+      if (char === '"' || char === "'") {
+        quote = char;
+        continue;
+      }
+      if (char && "([{".includes(char)) depth++;
+      if (char && ")]}".includes(char) && --depth < 0) return false;
+      if (index !== style.length && (char !== ";" || depth)) continue;
+      const match = /^\s*display\s*:\s*(.*?)\s*$/iu.exec(style.slice(start, index));
+      start = index + 1;
+      if (!match) continue;
+      const priority = /!\s*important\s*$/iu.test(match[1]);
+      if (important && !priority) continue;
+      display = match[1].replace(/!\s*important\s*$/iu, "").trim().toLowerCase();
+      important = priority;
+    }
+    return !quote && !depth && display === "none";
   }
   function isHiddenOrControl(node) {
     return ["button", "input", "textarea", "select", "svg", "script", "style", "template"].includes(node.tagName) || isHidden(node) || hasClass(node, "fold-handler-wrapper") || hasClass(node, "fold-handler");
@@ -9771,20 +10065,20 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
   }
   function styleWrappers(style, suppressBold) {
     if (!style) return [];
-    const declarations = /* @__PURE__ */ new Map();
+    const declarations2 = /* @__PURE__ */ new Map();
     for (const part of style.split(";")) {
       const separator = part.indexOf(":");
       if (separator < 0) continue;
       const name = part.slice(0, separator).trim().toLowerCase();
       const value = part.slice(separator + 1).trim().toLowerCase();
-      if (name && value) declarations.set(name, value);
+      if (name && value) declarations2.set(name, value);
     }
     const wrappers = [];
-    const weight = declarations.get("font-weight") ?? "";
+    const weight = declarations2.get("font-weight") ?? "";
     if (!suppressBold && /^(?:bold|bolder|[6-9]\d\d)$/u.test(weight)) wrappers.push("strong");
-    const fontStyle = declarations.get("font-style") ?? "";
+    const fontStyle = declarations2.get("font-style") ?? "";
     if (/^(?:italic|oblique)$/u.test(fontStyle)) wrappers.push("em");
-    const decoration = (declarations.get("text-decoration") ?? "") + " " + (declarations.get("text-decoration-line") ?? "");
+    const decoration = (declarations2.get("text-decoration") ?? "") + " " + (declarations2.get("text-decoration-line") ?? "");
     if (/\bunderline\b/u.test(decoration)) wrappers.push("u");
     if (/\bline-through\b/u.test(decoration)) wrappers.push("s");
     return wrappers;
@@ -10180,10 +10474,16 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
     function renderTableCell(cell) {
       const tag = cell.tagName === "th" ? "th" : "td";
       let attributes = "";
-      for (const span of ["colspan", "rowspan"]) {
-        const value = Number.parseInt(nodeAttr(cell, span), 10);
-        if (Number.isInteger(value) && value >= 2) attributes += " " + span + '="' + value + '"';
+      for (const span2 of ["colspan", "rowspan"]) {
+        const value = Number.parseInt(nodeAttr(cell, span2), 10);
+        if (Number.isInteger(value) && value >= 2) attributes += " " + span2 + '="' + value + '"';
       }
+      const style = cellStyleText(readCellStyle(nodeAttr(cell, "style"), {
+        align: nodeAttr(cell, "align"),
+        valign: nodeAttr(cell, "valign"),
+        bgcolor: nodeAttr(cell, "bgcolor")
+      }));
+      if (style) attributes += ' style="' + style + '"';
       const blocks = collectCellBlocks(cell, addWarning);
       let content;
       if (blocks.length) content = joinCellFragments(renderCellSequence(blocks));
@@ -10191,13 +10491,21 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
       return "<" + tag + attributes + ">" + content + "</" + tag + ">";
     }
     function renderTable(info) {
-      const table = findFirstElement(info.element, (element) => element.tagName === "table");
+      function findTable(node) {
+        if (node.tagName === "table") return isAuxiliaryTable(node) ? null : node;
+        for (const child of childElements(node)) {
+          const found = findTable(child);
+          if (found) return found;
+        }
+        return null;
+      }
+      const table = findTable(info.element);
       if (!table) {
         addWarning("unsupported_block", "表格块 " + info.id + " 无法解析");
         return null;
       }
       function renderRow(row) {
-        const cells = childElements(row).filter((cell) => cell.tagName === "td" || cell.tagName === "th");
+        const cells = childElements(row).filter((cell) => (cell.tagName === "td" || cell.tagName === "th") && !cell.attrs?.some(({ name, value }) => name === "hidden" || name === "aria-hidden" && value === "true") && !hasFinalDisplayNone(nodeAttr(cell, "style")));
         return cells.length ? "<tr>" + cells.map(renderTableCell).join("") + "</tr>" : "";
       }
       const parts = [];
@@ -10205,15 +10513,24 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
         if (child.tagName === "caption") {
           const content2 = renderLines(child) || renderInline(child.childNodes, false);
           parts.push("<caption>" + content2 + "</caption>");
-        } else if (child.tagName === "tr") {
-          parts.push(renderRow(child));
-        } else if (["thead", "tbody", "tfoot"].includes(child.tagName)) {
-          const rows = childElements(child).filter((row) => row.tagName === "tr").map(renderRow).join("");
-          if (rows) parts.push("<" + child.tagName + ">" + rows + "</" + child.tagName + ">");
         }
       }
+      let group, section, rowParts = [];
+      function flushRows() {
+        if (rowParts.length) parts.push("<" + section + ">" + rowParts.join("") + "</" + section + ">");
+        rowParts = [];
+      }
+      for (const entry of logicalTableRows(info.element, table)) {
+        if (group !== entry.group || section !== entry.section) flushRows();
+        group = entry.group;
+        section = entry.section;
+        const rendered = renderRow(entry.row);
+        if (rendered) rowParts.push(rendered);
+      }
+      flushRows();
       const content = parts.join("");
-      return content ? "<table>" + content + "</table>" : null;
+      const columns = columnGroupHtml(readTableColumnWidths(table));
+      return content ? "<table" + (columns ? ' style="table-layout:fixed;width:100%;overflow-wrap:anywhere"' : "") + ">" + columns + content + "</table>" : null;
     }
     function renderBlock(info) {
       const heading = HEADING_TYPE.exec(info.type);
@@ -10467,7 +10784,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
       return "";
     }
   }
-  function attr(node, name) {
+  function attr2(node, name) {
     return node.attrs?.find((item) => item.name === name && !item.namespace)?.value ?? "";
   }
   function joinText(items) {
@@ -10497,16 +10814,16 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
   }
   async function documentModel(html, files, fallback) {
     const document2 = boundedHtml(html);
-    const root = document2.childNodes.find(({ tagName }) => tagName === "html");
-    const head = root.childNodes.find(({ tagName }) => tagName === "head");
-    const body = root.childNodes.find(({ tagName }) => tagName === "body");
+    const root = document2.childNodes.find(({ tagName: tagName2 }) => tagName2 === "html");
+    const head = root.childNodes.find(({ tagName: tagName2 }) => tagName2 === "head");
+    const body = root.childNodes.find(({ tagName: tagName2 }) => tagName2 === "body");
     if (!body) throw inputError("invalid_html", "HTML 未包含可导入的正文。");
     const assets = /* @__PURE__ */ new Map();
     const warnings2 = [];
     const cacheWarnings = head.childNodes.find(
-      (node) => node.tagName === "meta" && attr(node, "name") === warningMarker
+      (node) => node.tagName === "meta" && attr2(node, "name") === warningMarker
     );
-    const cachedWarnings = cacheWarnings ? preservedWarnings(attr(cacheWarnings, "content")) : [];
+    const cachedWarnings = cacheWarnings ? preservedWarnings(attr2(cacheWarnings, "content")) : [];
     const importedWarningLocations = new Set(cachedWarnings.filter((item) => item.label).map(({ code, label }) => code + "\0" + label));
     const occupiedPaths = /* @__PURE__ */ new Set();
     let embedded = 0;
@@ -10535,8 +10852,8 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
       return { tag: "span", children: children?.length ? joinText([...children, " " + text]) : [text] };
     }
     async function readImage(node) {
-      const raw = attr(node, "src").trim();
-      const alt = attr(node, "alt").slice(0, 2048);
+      const raw = attr2(node, "src").trim();
+      const alt = attr2(node, "alt").slice(0, 2048);
       const label = alt ? "图片：" + alt : "图片";
       if (/^data:/iu.test(raw)) {
         const data = /^data:(image\/(?:png|jpeg|gif|webp));base64,([a-z0-9+/]+={0,2})$/iu.exec(raw);
@@ -10577,7 +10894,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
         }
         const tag = node.tagName;
         if (!tag || omittedTags.has(tag)) continue;
-        if (tag === "nav" && attr(node, "data-feishu-export-navigation") === "1") continue;
+        if (tag === "nav" && attr2(node, "data-feishu-export-navigation") === "1") continue;
         if (node.namespaceURI !== htmlNamespace || unsupportedTags.has(tag) || tag.includes("-")) {
           result.push(note("unsupported_block", "未转换的内容块"));
           continue;
@@ -10592,7 +10909,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
           continue;
         }
         if (tag === "a") {
-          const raw = attr(node, "href").trim();
+          const raw = attr2(node, "href").trim();
           const path = localPath(raw);
           const href = webLink(raw);
           if (path && assets.has(path)) result.push({ tag, path, children });
@@ -10607,15 +10924,23 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
         if (!["br", "hr"].includes(tag)) item.children = children;
         if (tag === "h1" && !firstHeading) firstHeading = nodeText(item).trim();
         if (tag === "td" || tag === "th") {
-          for (const span of ["colspan", "rowspan"]) {
-            const value = Number(attr(node, span));
-            if (Number.isInteger(value) && value >= 2 && value <= 64) item[span] = value;
+          Object.assign(item, readCellStyle(attr2(node, "style"), {
+            align: attr2(node, "align"),
+            valign: attr2(node, "valign"),
+            bgcolor: attr2(node, "bgcolor")
+          }));
+          for (const span2 of ["colspan", "rowspan"]) {
+            const value = Number(attr2(node, span2));
+            if (Number.isInteger(value) && value >= 2 && value <= 64) item[span2] = value;
           }
+        } else if (tag === "table") {
+          const widths = readTableColumnWidths(node);
+          if (widths) item.columnWidths = widths;
         } else if (tag === "ol") {
-          const value = attr(node, "start");
+          const value = attr2(node, "start");
           if (/^-?\d{1,6}$/u.test(value) && Number(value) !== 1) item.start = Number(value);
         } else if (tag === "code") {
-          const language = /(?:^|\s)language-([a-z0-9][a-z0-9-]{0,31})(?:\s|$)/iu.exec(attr(node, "class"))?.[1];
+          const language = /(?:^|\s)language-([a-z0-9][a-z0-9-]{0,31})(?:\s|$)/iu.exec(attr2(node, "class"))?.[1];
           if (language) item.language = language.toLowerCase();
         }
         result.push(item);
@@ -10626,7 +10951,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
     if (!blocks.some((item) => typeof item !== "string" || item.trim())) {
       throw inputError("invalid_html", "HTML 未包含可导入的正文。");
     }
-    const htmlTitle = head.childNodes.find(({ tagName }) => tagName === "title")?.childNodes.map((node) => node.value ?? "").join("");
+    const htmlTitle = head.childNodes.find(({ tagName: tagName2 }) => tagName2 === "title")?.childNodes.map((node) => node.value ?? "").join("");
     const fullTitle = (firstHeading || htmlTitle?.trim() || fallback).replace(/\s+/gu, " ").trim();
     const title = fullTitle.match(/^.{1,160}/u)?.[0] || "文档";
     return {
@@ -11432,11 +11757,12 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
     }
     return paths;
   }
-  function htmlNodes(nodes, lookup, embedded, account = (markup) => markup, presentation) {
+  function htmlNodes(nodes, lookup, embedded, account = (markup) => markup, presentation, cellColor) {
     return nodes.map((node) => {
       if (typeof node === "string") return account(escapeHtml(node));
       const { tag, children = [] } = node;
-      if (!visibleTags.has(tag)) return htmlNodes(children, lookup, embedded, account, presentation);
+      if (!visibleTags.has(tag)) return htmlNodes(children, lookup, embedded, account, presentation, cellColor);
+      const childCellColor = tag === "td" || tag === "th" ? normalizeColor(node.color) || cellColor : cellColor;
       const asset = lookup.get(node.path);
       if (tag === "img") {
         if (!rasterTypes.has(asset?.type) || asset.role !== "image") return account("[缺少图片]");
@@ -11453,22 +11779,28 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
         } else if (node.href && webLink(node.href)) {
           attrs = ' href="' + escapeHtml(webLink(node.href)) + '" rel="noopener noreferrer"';
         } else {
-          return htmlNodes(children, lookup, embedded, account, presentation);
+          return htmlNodes(children, lookup, embedded, account, presentation, cellColor);
         }
+        if (cellColor) attrs += ' style="color:inherit"';
       }
       if (tag === "td" || tag === "th") {
         for (const name of ["colspan", "rowspan"]) {
           const value = node[name];
           if (Number.isInteger(value) && value >= 2 && value <= 64) attrs += " " + name + '="' + value + '"';
         }
+        const style = cellStyleText(node);
+        if (style) attrs += ' style="' + style + '"';
       }
+      const columns = tag === "table" ? columnGroupHtml(node.columnWidths) : "";
+      if (columns) attrs += ' style="table-layout:fixed;width:100%;overflow-wrap:anywhere"';
       if (tag === "ol" && Number.isInteger(node.start)) attrs = ' start="' + node.start + '"';
       if (tag === "code" && /^[a-z0-9][a-z0-9-]{0,31}$/u.test(node.language ?? "")) {
         attrs = ' class="language-' + node.language + '"';
       }
+      if (tag === "pre" && cellColor) attrs += ' style="color:inherit;background:transparent"';
       if (presentation?.headings.has(node)) attrs += ' id="' + presentation.headings.get(node) + '"';
       const opening = account((tag === "table" && presentation ? '<div class="table-scroll">' : "") + "<" + tag + attrs + ">");
-      let contents = htmlNodes(children, lookup, embedded, account, presentation);
+      let contents = (columns ? account(columns) : "") + htmlNodes(children, lookup, embedded, account, presentation, childCellColor);
       if (tag === "pre" && typeof children[0] === "string" && children[0].startsWith("\n")) {
         contents = account("\n") + contents;
       }
@@ -11614,7 +11946,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
     const sections = onlyElements(table);
     const rows = sections.flatMap((node) => node.tag === "tr" ? [node] : onlyElements(node));
     const cells = rows.map(onlyElements);
-    if (sections.some((node) => !["tr", "thead", "tbody", "tfoot"].includes(node.tag)) || rows.some((node) => node.tag !== "tr") || !cells[0]?.length || cells[0].some(({ tag }) => tag !== "th") || cells.slice(1).some((row) => row.some(({ tag }) => tag !== "td")) || cells.some((row) => row.length !== cells[0].length || row.some((cell) => cell.colspan || cell.rowspan || complexCell(cell)))) {
+    if (normalizeColumnWidths(table.columnWidths) || cells.some((row) => row.some((cell) => cellStyleText(cell))) || sections.some((node) => !["tr", "thead", "tbody", "tfoot"].includes(node.tag)) || rows.some((node) => node.tag !== "tr") || !cells[0]?.length || cells[0].some(({ tag }) => tag !== "th") || cells.slice(1).some((row) => row.some(({ tag }) => tag !== "td")) || cells.some((row) => row.length !== cells[0].length || row.some((cell) => cell.colspan || cell.rowspan || complexCell(cell)))) {
       return markdownHtml([table], lookup);
     }
     const lines = cells.map((row) => "| " + row.map((cell) => {
@@ -12163,6 +12495,186 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
     throw new Error("未读到唯一、可见且加载稳定的图片");
   }
 
+  // src/userscript/table.js
+  function rgba(value) {
+    const opaque2 = normalizeColor(value);
+    if (opaque2) return [...[1, 3, 5].map((index) => parseInt(opaque2.slice(index, index + 2), 16)), 1];
+    const match = /^rgba?\(([^)]+)\)$/iu.exec(value || "");
+    if (!match) return [0, 0, 0, 0];
+    const parts = match[1].trim().split(/\s*[,/]\s*|\s+/u);
+    if (parts.length !== 3 && parts.length !== 4) return [0, 0, 0, 0];
+    const numbers = parts.map((part, index) => Number(part.replace(/%$/u, "")) * (part.endsWith("%") ? index < 3 ? 2.55 : 0.01 : 1));
+    if (!numbers.every((value2, index) => Number.isFinite(value2) && value2 >= 0 && value2 <= (index < 3 ? 255 : 1))) return [0, 0, 0, 0];
+    return [...numbers.slice(0, 3), numbers[3] ?? 1];
+  }
+  var hex = (channels) => "#" + channels.map((value) => Math.round(value).toString(16).padStart(2, "0")).join("");
+  var blend = (front, back) => front.slice(0, 3).map((channel, index) => channel * front[3] + back[index] * (1 - front[3]));
+  function alignment(style) {
+    const value = style.textAlign?.toLowerCase();
+    return normalizeAlign(value === "start" ? style.direction === "rtl" ? "right" : "left" : value === "end" ? style.direction === "rtl" ? "left" : "right" : value);
+  }
+  function span(node, name, maximum = 64) {
+    const raw = node.getAttribute(name);
+    return raw == null || raw === "" ? 1 : /^\d{1,5}$/u.test(raw) && Number(raw) >= 1 && Number(raw) <= maximum ? Number(raw) : 0;
+  }
+  function tableGrid(table, isHiddenCell) {
+    let occupied = [], columns = 0, section;
+    const complete = [];
+    for (const row of table.rows) {
+      if (row.parentElement !== section) occupied = [];
+      section = row.parentElement;
+      let cursor = 0, plain = !occupied.some(Boolean);
+      const next = occupied.map((value) => Math.max(0, value - 1));
+      const cells = [...row.cells].filter((cell) => !isHiddenCell(cell));
+      for (const cell of cells) {
+        const across = span(cell, "colspan");
+        const down = cell.getAttribute("rowspan") === "0" ? table.rows.length : span(cell, "rowspan", 65534);
+        if (!across || !down) return;
+        plain &&= across === 1 && down === 1;
+        while (occupied[cursor]) cursor++;
+        if (occupied.slice(cursor, cursor + across).some(Boolean)) return;
+        for (let index = cursor; index < cursor + across; index++) next[index] = Math.max(next[index] || 0, down - 1);
+        cursor += across;
+        if (cursor > 64) return;
+      }
+      columns = Math.max(columns, cursor, occupied.length);
+      if (plain && cells.length) complete.push(cells);
+      occupied = next;
+    }
+    return { columns, complete };
+  }
+  function measuredWidths(table, isHiddenCell) {
+    const grid = tableGrid(table, isHiddenCell);
+    if (!grid?.columns) return;
+    const widths = [];
+    let valid = true;
+    for (const child of table.children || []) {
+      if (child.localName !== "colgroup" && child.localName !== "col") continue;
+      const cols = child.localName === "col" ? [child] : [...child.children].filter((node) => node.localName === "col");
+      for (const col of cols.length ? cols : [child]) {
+        const count = span(col, "span"), width = col.getBoundingClientRect().width;
+        if (!count || !Number.isFinite(width) || width <= 0 || widths.length + count > 64) {
+          valid = false;
+          break;
+        }
+        widths.push(...Array(count).fill(width / count));
+      }
+      if (!valid) break;
+    }
+    if (valid && widths.length === grid.columns) return normalizeColumnWidths(widths);
+    for (const cells of grid.complete) {
+      if (cells.length !== grid.columns) continue;
+      const result = normalizeColumnWidths(cells.map((cell) => cell.getBoundingClientRect().width));
+      if (result) return result;
+    }
+  }
+  function styledHtml(html, style) {
+    if (!style) return html;
+    const table = parseFragment("<table><tbody><tr>" + html + "</tr></tbody></table>").childNodes[0];
+    const cell = table?.childNodes[0]?.childNodes[0]?.childNodes.find((node) => node.tagName === "td" || node.tagName === "th");
+    if (!cell) return html;
+    const existing = cell.attrs.find((attr3) => attr3.name === "style");
+    if (existing) existing.value = existing.value.replace(/;?\s*$/u, "") + ";" + style;
+    else cell.attrs.push({ name: "style", value: style });
+    return serializeOuter(cell);
+  }
+  function createTableStyleCapture() {
+    let styles = /* @__PURE__ */ new WeakMap(), backgrounds = /* @__PURE__ */ new WeakMap(), cells = /* @__PURE__ */ new WeakMap(), tables = /* @__PURE__ */ new WeakMap();
+    const canRead = (node) => node?.nodeType === 1 && typeof node.ownerDocument?.defaultView?.getComputedStyle === "function";
+    function readStyle(node) {
+      if (styles.has(node)) return styles.get(node);
+      if (!canRead(node)) return {};
+      const computed = node.ownerDocument.defaultView.getComputedStyle(node);
+      const snapshot = Object.fromEntries(["backgroundColor", "color", "textAlign", "verticalAlign", "direction", "display"].map((key) => [key, computed[key]]));
+      styles.set(node, snapshot);
+      return snapshot;
+    }
+    function cellState(cell, html = cell.outerHTML) {
+      let cached = cells.get(cell);
+      if (cached?.html !== html) {
+        styles.delete(cell);
+        backgrounds.delete(cell);
+        cached = { html };
+        cells.set(cell, cached);
+      }
+      return cached;
+    }
+    function isHiddenCell(cell) {
+      if (cell.hidden || cell.getAttribute?.("hidden") != null || cell.getAttribute?.("aria-hidden") === "true") return true;
+      if (!canRead(cell)) return false;
+      const cached = cellState(cell);
+      if (cached.hidden === void 0) cached.hidden = readStyle(cell).display === "none";
+      return cached.hidden;
+    }
+    function background(node) {
+      const layers = [];
+      let result;
+      while (node) {
+        if (backgrounds.has(node)) {
+          result = backgrounds.get(node);
+          break;
+        }
+        const layer = rgba(readStyle(node).backgroundColor);
+        layers.push({ node, layer });
+        if (layer[3] === 1) {
+          result = { channels: layer.slice(0, 3), captured: true };
+          break;
+        }
+        node = node.parentElement;
+      }
+      result ||= { channels: [255, 255, 255], captured: false };
+      for (const { node: node2, layer } of layers.reverse()) {
+        result = { channels: blend(layer, result.channels), captured: result.captured || layer[3] > 0 };
+        backgrounds.set(node2, result);
+      }
+      return result;
+    }
+    return {
+      isHiddenCell,
+      cellHtml(cell, html = cell.outerHTML) {
+        if (!canRead(cell)) return html;
+        const cached = cellState(cell, html);
+        if (cached.styled !== void 0) return cached.styled;
+        const style = readStyle(cell), fill = background(cell);
+        const lines = [...cell.querySelectorAll(".ace-line")].filter((line) => line.closest("td,th") === cell);
+        const lineStyles = lines.map((line) => {
+          styles.delete(line);
+          return readStyle(line);
+        });
+        const alignments = new Set(lineStyles.map(alignment));
+        const foreground = (value2) => {
+          const color2 = rgba(value2);
+          return color2[3] > 0 ? hex(blend(color2, fill.channels)) : void 0;
+        };
+        const colors = new Set(lineStyles.map((line) => foreground(line.color)));
+        const value = cellStyleText({
+          background: fill.captured ? hex(fill.channels) : void 0,
+          color: fill.captured ? colors.size === 1 && !colors.has(void 0) ? [...colors][0] : foreground(style.color) : void 0,
+          align: alignments.size === 1 && !alignments.has(void 0) ? [...alignments][0] : alignment(style),
+          valign: normalizeValign(style.verticalAlign)
+        });
+        const visibility = cell.style?.display === "none" && style.display && style.display !== "none" && !isHiddenCell(cell) ? ";display:table-cell!important" : "";
+        const styled = styledHtml(html, value + visibility);
+        cached.styled = styled;
+        return styled;
+      },
+      columnWidths(table) {
+        if (!canRead(table)) return;
+        const html = table.outerHTML, cached = tables.get(table);
+        if (cached?.html === html) return cached.widths;
+        const widths = measuredWidths(table, isHiddenCell);
+        tables.set(table, { html, widths });
+        return widths;
+      },
+      beginFinalReview() {
+        styles = /* @__PURE__ */ new WeakMap();
+        backgrounds = /* @__PURE__ */ new WeakMap();
+        cells = /* @__PURE__ */ new WeakMap();
+        tables = /* @__PURE__ */ new WeakMap();
+      }
+    };
+  }
+
   // src/userscript/capture.js
   var ZERO_WIDTH3 = /[\u200b\u200c\u200d\u2060\ufeff]/gu;
   var CODE_ROW = ".code-line-wrapper[data-line-num]";
@@ -12340,19 +12852,32 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
         }
         return { signature: JSON.stringify(parts), ready, visible };
       }, sampleTable = function(el) {
-        const table = el.querySelector("table");
-        if (!table?.rows.length) return;
+        let table = el.querySelector("table");
+        if (isAuxiliaryTable(table)) table = [...el.querySelectorAll("table")].find((candidate) => {
+          if (isAuxiliaryTable(candidate)) return false;
+          for (let parent = candidate.parentElement; parent && parent !== el; parent = parent.parentElement) {
+            if (isAuxiliaryTable(parent)) return false;
+          }
+          return true;
+        });
+        if (!table) return;
+        const rows = logicalTableRows(el, table);
+        if (!rows.length) return;
         const id = el.getAttribute("data-block-id");
         if (!tables.has(id)) tables.set(id, { rows: /* @__PURE__ */ new Map(), cells: /* @__PURE__ */ new Map() });
         const state = tables.get(id);
+        state.columnWidths = tableStyles.columnWidths(table) || state.columnWidths;
         const offset = scroller.scrollTop - scroller.getBoundingClientRect().top;
-        let index = 0;
-        for (const row of table.rows) {
+        const auxiliaryCount = rows.filter((entry) => entry.auxiliary).length;
+        const headerCount = rows.filter((entry) => entry.section === "thead").length;
+        let index = 0, headerIndex = -headerCount;
+        for (const { row, section, auxiliary } of rows) {
           const indexAttr = row.getAttribute("data-index");
-          const rowNum = indexAttr && /^\d+$/u.test(indexAttr) && Number.isSafeInteger(Number(indexAttr)) ? Number(indexAttr) : index;
-          index++;
+          const rowNum = section === "thead" ? headerIndex++ : indexAttr && /^\d+$/u.test(indexAttr) && Number.isSafeInteger(Number(indexAttr)) ? Number(indexAttr) : index;
+          if (!auxiliary) index++;
           const keys = [];
           for (const cell of row.cells) {
+            if (tableStyles.isHiddenCell(cell)) continue;
             const col = keys.length;
             const key = cell.getAttribute("data-block-id") || cell.getAttribute("data-record-id") || rowNum + ":" + col;
             keys.push(key);
@@ -12374,7 +12899,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
             const rect = cell.getBoundingClientRect();
             const center = rect.height > 0 ? offset + rect.top + rect.height / 2 : previous?.center;
             if (previous?.ready && !ready) continue;
-            const html = cell.outerHTML;
+            const html = tableStyles.cellHtml(cell);
             if (previous?.html === html && previous.ready === ready) continue;
             const semantic = ready ? semanticContent(html, true) : null;
             if (previous?.ready && ready && previous.semantic && semantic && semantic.text.trim() && semantic.fingerprint !== previous.semantic.fingerprint && length <= previous.length && !semantic.nested && !previous.semantic.nested) {
@@ -12382,19 +12907,19 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
               else continue;
             }
             if (!previous || !previous.ready && ready || previous.ready === ready && length >= previous.length) {
-              state.cells.set(key, { rowNum, col, ready, length, center, html, semantic });
+              state.cells.set(key, { rowNum: rowNum + (section === "thead" ? headerCount : auxiliaryCount), col, ready, length, center, html, semantic });
             }
           }
           const existing = state.rows.get(rowNum);
-          if (!existing || keys.length >= existing.keys.length && keys.some((key, i) => existing.keys[i] !== key)) {
+          if (!existing || existing.section !== section || keys.length >= existing.keys.length && keys.some((key, i) => existing.keys[i] !== key)) {
             const shell = row.cloneNode(false).outerHTML;
-            const section = row.parentElement?.localName;
-            state.rows.set(rowNum, { keys, shell, section: section === "thead" || section === "tfoot" ? section : "tbody" });
+            state.rows.set(rowNum, { keys, shell, section });
           }
         }
       }, writeTable = function(block, state) {
         const fragment = parseFragment(block.html);
         function findTable(node) {
+          if (isAuxiliaryTable(node)) return;
           if (node.tagName === "table") return node;
           for (const child of node.childNodes || []) {
             const result = findTable(child);
@@ -12424,7 +12949,9 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
         const sections = [...groups].map(([tag, rows]) => "<" + tag + ">" + rows.join("") + "</" + tag + ">").join("");
         const rebuilt = parseFragment("<table>" + sections + "</table>").childNodes[0];
         for (const child of rebuilt.childNodes) child.parentNode = table;
-        table.childNodes = [...table.childNodes.filter((child) => child.tagName === "caption" || child.tagName === "colgroup"), ...rebuilt.childNodes];
+        const columns = state.columnWidths ? parseFragment("<table>" + columnGroupHtml(state.columnWidths) + "</table>").childNodes[0].childNodes : null;
+        if (columns) for (const column of columns) column.parentNode = table;
+        table.childNodes = [...table.childNodes.filter((child) => child.tagName === "caption" || !columns && child.tagName === "colgroup"), ...columns || [], ...rebuilt.childNodes];
         block.html = serialize(fragment);
       }, sampleBlock = function(el) {
         const id = el.getAttribute("data-block-id");
@@ -12533,9 +13060,9 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
         const fragment = parseFragment(block.html);
         function findChildren(node) {
           const attrs = node.attrs || [];
-          const id = attrs.find((attr2) => attr2.name === "data-block-id")?.value;
+          const id = attrs.find((attr3) => attr3.name === "data-block-id")?.value;
           if (id && id !== block.id) return null;
-          const classes = attrs.find((attr2) => attr2.name === "class")?.value.split(/\s+/u) || [];
+          const classes = attrs.find((attr3) => attr3.name === "class")?.value.split(/\s+/u) || [];
           if (classes.includes("list-children")) return node;
           for (const child of node.childNodes || []) {
             const found = findChildren(child);
@@ -12578,6 +13105,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
       }
       const scoreOf = (el) => (el.textContent ? el.textContent.length : 0) * 1e3 + el.querySelectorAll("*").length;
       const tables = /* @__PURE__ */ new Map();
+      const tableStyles = createTableStyleCapture();
       async function captureImage(id) {
         if (blocks.get(id)?.type === "whiteboard") {
           try {
@@ -12870,9 +13398,12 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
         if (reference.type === "synced_reference") await auditReference(reference);
       }
       refreshRoots();
+      tableStyles.beginFinalReview();
       const tableBlocks = new Map([...blocks].filter(([, block]) => block.type === "table"));
       for (const block of tableBlocks.values()) {
         checkStop();
+        const currentTable = document.querySelector('[data-block-id="' + block.id + '"]');
+        if (currentTable) sampleTable(currentTable);
         async function sampleAt(y, done) {
           const maxTop = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
           scroller.scrollTop = Math.max(0, Math.min(maxTop, y - scroller.clientHeight / 2));
@@ -13007,10 +13538,10 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
       for (const page of embeddedPages.values()) {
         let findPageChildren = function(node) {
           const attrs = node.attrs || [];
-          const type = attrs.find((attr2) => attr2.name === "data-block-type")?.value;
-          const id = attrs.find((attr2) => attr2.name === "data-block-id")?.value;
+          const type = attrs.find((attr3) => attr3.name === "data-block-type")?.value;
+          const id = attrs.find((attr3) => attr3.name === "data-block-id")?.value;
           if (type === "page" && id !== page.id) return null;
-          const classes = (attrs.find((attr2) => attr2.name === "class")?.value || "").split(/\s+/u);
+          const classes = (attrs.find((attr3) => attr3.name === "class")?.value || "").split(/\s+/u);
           if (classes.includes("page-block-children") || classes.includes("reference-page-block-childen")) return node;
           for (const child of node.childNodes || []) {
             const found = findPageChildren(child);
@@ -13046,7 +13577,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
         let restoreNested = function(node) {
           for (let index = 0; index < (node.childNodes || []).length; index++) {
             let child = node.childNodes[index];
-            const id = child.attrs?.find((attr2) => attr2.name === "data-block-id")?.value;
+            const id = child.attrs?.find((attr3) => attr3.name === "data-block-id")?.value;
             const block = nested.get(id);
             if (block) {
               const replacement = parseFragment(block.html).childNodes.find((item) => item.tagName);
@@ -13200,9 +13731,9 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
   function color(value) {
     if (typeof value !== "string") return null;
     const text = value.trim();
-    const hex2 = /^#([\da-f]{3,8})$/iu.exec(text)?.[1];
-    if (hex2) {
-      const expanded = hex2.length <= 4 ? [...hex2].map((part) => part + part).join("") : hex2;
+    const hex3 = /^#([\da-f]{3,8})$/iu.exec(text)?.[1];
+    if (hex3) {
+      const expanded = hex3.length <= 4 ? [...hex3].map((part) => part + part).join("") : hex3;
       if (![6, 8].includes(expanded.length)) return null;
       const rgb2 = [0, 2, 4].map((index) => parseInt(expanded.slice(index, index + 2), 16));
       return { rgb: rgb2, alpha: expanded.length === 8 ? parseInt(expanded.slice(6), 16) / 255 : 1 };
@@ -13221,7 +13752,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
     const parsed = color(value);
     return parsed?.alpha >= 0.95 ? parsed.rgb.map(Math.round) : null;
   }
-  function hex(rgb) {
+  function hex2(rgb) {
     return "#" + rgb.map((channel) => Math.round(channel).toString(16).padStart(2, "0")).join("");
   }
   function luminance(rgb) {
@@ -13281,16 +13812,16 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
     const warning = readable(opaque(input.warning) || opaque(defaults.warning), surface, 4.5);
     return {
       mode,
-      surface: hex(surface),
-      text: hex(text),
-      muted: hex(muted),
-      accent: hex(accent),
+      surface: hex2(surface),
+      text: hex2(text),
+      muted: hex2(muted),
+      accent: hex2(accent),
       "accent-text": accentText,
-      button: hex(button.background),
+      button: hex2(button.background),
       "button-text": button.text,
-      warning: hex(warning),
-      border: hex(mix(surface, text, mode === "dark" ? 0.25 : 0.16)),
-      soft: hex(soft),
+      warning: hex2(warning),
+      border: hex2(mix(surface, text, mode === "dark" ? 0.25 : 0.16)),
+      soft: hex2(soft),
       shadow: mode === "dark" ? "0 8px 28px rgb(0 0 0 / .38)" : "0 8px 28px rgb(15 30 23 / .16)"
     };
   }
@@ -13314,7 +13845,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
             context.fillStyle = value;
             context.fillRect(0, 0, 1, 1);
             const [r, g, b, a] = context.getImageData(0, 0, 1, 1).data;
-            if (a >= 242) result = hex([r, g, b]);
+            if (a >= 242) result = hex2([r, g, b]);
           }
         }
       } catch {

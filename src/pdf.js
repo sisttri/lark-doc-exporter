@@ -1,5 +1,6 @@
 // This module only consumes the neutral document tree. Nothing here reads a page.
 import {warningLabel} from './shared.js';
+import {normalizeCellStyle, normalizeColumnWidths} from './table-style.js';
 const INLINE = new Set(['a', 'span', 'strong', 'b', 'em', 'i', 's', 'del', 'strike', 'small', 'u', 'code', 'mark', 'sub', 'sup', 'br']);
 const SECTIONS = new Set(['thead', 'tbody', 'tfoot']);
 const MiB = 1024 * 1024;
@@ -121,7 +122,27 @@ function boundLongTokens(value) {
   // pdfmake remeasures the remaining text at each forced line break.
   return value.replace(/[^\s\u200b\u3000-\u9fff]{128,}/gu, token => token.match(/.{1,64}/gu).join('\u200b'));
 }
-function columnWidths(grid, count, availableWidth) {
+function columnWidths(grid, count, availableWidth, hints) {
+  const source = normalizeColumnWidths(hints);
+  if (source?.length === count) {
+    const padding = source.map((_, index) => (index ? COLUMN_GAP / 2 : 0) + (index < count - 1 ? COLUMN_GAP / 2 : 0));
+    const widths = Array(count);
+    let pending = source.map((_, index) => index), remaining = availableWidth, total = 10000;
+    while (pending.length) {
+      const narrow = pending.filter(index => remaining * source[index] / total - padding[index] < MIN_COLUMN_WIDTH);
+      if (!narrow.length) {
+        for (const index of pending) widths[index] = remaining * source[index] / total - padding[index];
+        break;
+      }
+      for (const index of narrow) {
+        widths[index] = MIN_COLUMN_WIDTH;
+        remaining -= MIN_COLUMN_WIDTH + padding[index];
+        total -= source[index];
+      }
+      pending = pending.filter(index => widths[index] === undefined);
+    }
+    return widths;
+  }
   const weights = Array(count).fill(1);
   function contentUnits(node) {
     let longest = 0, line = 0;
@@ -149,7 +170,7 @@ export function pdfDefinition(snapshot, prepared = {images:{}, names:new Map()})
   checkedSize(snapshot);
   let denseTables = 0;
   const textLine = (str, add = {}) => ({text:boundLongTokens(str), ...add});
-  function sequence(nodes, availableWidth, fontSize) {
+  function sequence(nodes, availableWidth, fontSize, cellColor) {
     const out = [], buffer = [];
     function flush() { if (buffer.length) out.push({text:buffer.splice(0)}); }
     function walk(node, style) {
@@ -170,7 +191,7 @@ export function pdfDefinition(snapshot, prepared = {images:{}, names:new Map()})
             out.push({image:id, fit, margin:[0,3,0,3]});
           }
         }
-        if (node.alt || !id) out.push(textLine(node.alt || '图片无法排版', {fontSize:9,color:'#596960'}));
+        if (node.alt || !id) out.push(textLine(node.alt || '图片无法排版', {fontSize:9,color:cellColor ?? '#596960'}));
         return;
       }
       if (INLINE.has(tag)) {
@@ -181,18 +202,18 @@ export function pdfDefinition(snapshot, prepared = {images:{}, names:new Map()})
         if (tag === 'small' || tag === 'sup' || tag === 'sub') next.fontSize = 8;
         if (tag === 'u') next.decoration = withDecoration(style.decoration, 'underline');
         if (tag === 'a' && /^(?:https?:\/\/|mailto:)/i.test(node.href || '')) {
-          next.link = node.href; next.color = '#155e50'; next.decoration = withDecoration(style.decoration, 'underline');
+          next.link = node.href; next.color = cellColor ?? '#155e50'; next.decoration = withDecoration(style.decoration, 'underline');
         }
-        if (tag === 'code') next.background = '#edf1ee';
+        if (tag === 'code' && !cellColor) next.background = '#edf1ee';
         (node.children || []).forEach(child => walk(child, next));
         return;
       }
-      flush(); out.push(block(node, availableWidth, fontSize));
+      flush(); out.push(block(node, availableWidth, fontSize, cellColor));
     }
     nodes.forEach(node => walk(node, {})); flush();
     return out.length ? out : [{text:''}];
   }
-  function table(node, availableWidth, fontSize) {
+  function table(node, availableWidth, fontSize, cellColor) {
     const rows = tableRows(node);
     if (!rows.length) return textLine('');
     const rowCells = rows.map(({node}) => (node.children || []).filter(cell => cell.tag === 'td' || cell.tag === 'th'));
@@ -217,38 +238,41 @@ export function pdfDefinition(snapshot, prepared = {images:{}, names:new Map()})
     if (!width) return textLine('');
     const columnWidth = (availableWidth - (width - 1) * COLUMN_GAP) / width;
     if (columnWidth < MIN_COLUMN_WIDTH) return flatTable();
-    const widths = columnWidths(grid, width, availableWidth);
+    const widths = columnWidths(grid, width, availableWidth, node.columnWidths);
     if (headers >= rows.length) headers = 0;
     const body = grid.map(row => Array.from({length:width}, (_, index) => {
       const entry = row[index];
       if (!entry) return {text:''};
       if (!entry.cell) return {};
       const {cell, colSpan, rowSpan} = entry;
+      const style = normalizeCellStyle(cell);
+      const color = style.color ?? cellColor;
       const cellWidth = widths.slice(index, index + colSpan).reduce((sum, value) => sum + value, 0) + (colSpan - 1) * COLUMN_GAP;
-      return {stack:sequence(cell.children || [], cellWidth, 9), bold:cell.tag === 'th',
-        fillColor:cell.tag === 'th' ? '#e5eee8' : undefined, colSpan, rowSpan};
+      return {stack:sequence(cell.children || [], cellWidth, 9, color), bold:cell.tag === 'th',
+        fillColor:style.background ?? (cell.tag === 'th' && !cellColor ? '#e5eee8' : undefined), color,
+        alignment:style.align, verticalAlignment:style.valign, colSpan, rowSpan};
     }));
     return {table:{headerRows:headers, widths, body}, layout:'lightHorizontalLines', fontSize:9, margin:[0,5,0,6]};
     function flatTable() {
       denseTables++;
       const stack = rowCells.map(cells => {
         const nodes = cells.flatMap((cell, index) => [...(index ? ['　｜　'] : []), ...(cell.children || [])]);
-        return {stack:sequence(nodes, availableWidth, fontSize),margin:[0,0,0,4]};
+        return {stack:sequence(nodes, availableWidth, fontSize, cellColor),margin:[0,0,0,4]};
       });
       return {stack, margin:[0,4,0,6]};
     }
   }
-  function block(node, availableWidth, fontSize) {
+  function block(node, availableWidth, fontSize, cellColor) {
     const tag = node.tag, kids = node.children || [];
     if (isHeading(tag)) {
       const level = Number(tag[1]);
       const headingSize = [22,17,14,12,11,10][level-1];
-      return {stack:sequence(kids, availableWidth, headingSize), bold:true, fontSize:headingSize, margin:[0,8,0,4], headlineLevel:level};
+      return {stack:sequence(kids, availableWidth, headingSize, cellColor), bold:true, fontSize:headingSize, margin:[0,8,0,4], headlineLevel:level};
     }
     if (tag === 'table') {
       const caption = kids.find(k => k.tag === 'caption');
-      const content = table(node, availableWidth, fontSize);
-      return caption ? {stack:[{stack:sequence(caption.children || [], availableWidth, fontSize), bold:true},content]} : content;
+      const content = table(node, availableWidth, fontSize, cellColor);
+      return caption ? {stack:[{stack:sequence(caption.children || [], availableWidth, fontSize, cellColor), bold:true},content]} : content;
     }
     if (tag === 'ul' || tag === 'ol') {
       const items = kids.filter(x => x.tag === 'li');
@@ -260,22 +284,22 @@ export function pdfDefinition(snapshot, prepared = {images:{}, names:new Map()})
       const margin = [0,3,0,4];
       if (itemWidth < MIN_COLUMN_WIDTH) return {
         stack:items.map((item,index) => ({stack:[textLine(tag === 'ol' ? (start+index)+'.' : '•'),
-          ...sequence(item.children || [], availableWidth, fontSize)]})), margin
+          ...sequence(item.children || [], availableWidth, fontSize, cellColor)]})), margin
       };
-      return {[tag]:items.map(item => ({stack:sequence(item.children || [], itemWidth, fontSize)})),
+      return {[tag]:items.map(item => ({stack:sequence(item.children || [], itemWidth, fontSize, cellColor)})),
         ...(tag === 'ol' ? {start} : {}), margin};
     }
     if (tag === 'hr') return {canvas:[{type:'line', x1:0, y1:0, x2:Math.min(200,availableWidth), y2:0, lineWidth:.5, lineColor:'#9bafa4'}],margin:[0,6,0,6]};
     if (tag === 'pre') {
       const runs = plain(node).match(/[\x00-\x7f]+|[^\x00-\x7f]+/gu) || [];
       return {text:runs.map(text => textLine(text, {font:/^[\x00-\x7f]+$/u.test(text) ? 'Courier' : 'Noto'})),
-        preserveLeadingSpaces:true, fontSize:9, margin:[Math.min(6,availableWidth-MIN_COLUMN_WIDTH),4,0,5], color:'#314d40'};
+        preserveLeadingSpaces:true, fontSize:9, margin:[Math.min(6,availableWidth-MIN_COLUMN_WIDTH),4,0,5], color:cellColor ?? '#314d40'};
     }
     if (tag === 'blockquote') {
       const indent = Math.min(14,availableWidth-MIN_COLUMN_WIDTH);
-      return {stack:sequence(kids, availableWidth-indent, fontSize),margin:[indent,4,0,5],color:'#4b6057'};
+      return {stack:sequence(kids, availableWidth-indent, fontSize, cellColor),margin:[indent,4,0,5],color:cellColor ?? '#4b6057'};
     }
-    return {stack:sequence(kids, availableWidth, fontSize), margin:[0,1,0,3]};
+    return {stack:sequence(kids, availableWidth, fontSize, cellColor), margin:[0,1,0,3]};
   }
   const content = sequence(snapshot.blocks, PAGE_WIDTH, 10);
   function matchesTitle(node) {

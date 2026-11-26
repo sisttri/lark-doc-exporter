@@ -34,6 +34,23 @@ test('PDF preserves overlapping strikethrough and underline on a table link', ()
   ]);
   assert.deepEqual(text.map(run => run.link ?? null), [null, null, href, href, href, null]);
 });
+test('PDF preserves validated table cell styles and the default header fill', () => {
+  const snapshot = {...base, blocks:[n('table', [
+    n('tr', [n('th', ['Styled'], {background:'#123456',color:'#abcdef',align:'center',valign:'middle'}), n('th', ['Default'])]),
+    n('tr', [n('td', ['Plain']), n('td', ['Invalid'], {background:'url(https://example.org/color)',color:'var(--color)',align:'sideways',valign:'center'})]),
+  ])]};
+  const original = structuredClone(snapshot);
+  const {doc} = pdfDefinition(snapshot);
+  const {body} = doc.content.find(item => item.table).table;
+  assert.equal(body[0][0].fillColor, '#123456');
+  assert.equal(body[0][0].color, '#abcdef');
+  assert.equal(body[0][0].alignment, 'center');
+  assert.equal(body[0][0].verticalAlignment, 'middle');
+  assert.equal(body[0][0].bold, true);
+  assert.equal(body[0][1].fillColor, '#e5eee8');
+  for (const cell of body[1]) for (const key of ['fillColor','color','alignment','verticalAlignment']) assert.equal(cell[key], undefined);
+  assert.deepEqual(snapshot, original);
+});
 test('PDF code preserves source spacing and uses Courier with Unicode fallback', () => {
   const code = 'root\n├── main.go    中文注释\n│   └── config.yml\n  iiiWWW 123\n' + 'x'.repeat(190);
   const {doc} = pdfDefinition({...base, blocks:[n('pre', [n('code', [code])])]});

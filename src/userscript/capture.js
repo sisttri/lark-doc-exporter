@@ -5,6 +5,8 @@ import { parseFragment, serialize } from "parse5";
 import { readDocumentSource } from './source.js';
 import { captureWhiteboardPreview, findWhiteboardCanvas, isWhiteboardReady } from './whiteboard.js';
 import { captureLoadedImage, readImageState, sameImageState } from './image.js';
+import { createTableStyleCapture } from './table.js';
+import { columnGroupHtml, isAuxiliaryTable, logicalTableRows } from '../table-style.js';
 export { readDocumentSource } from './source.js';
 
 const ZERO_WIDTH = /[\u200b\u200c\u200d\u2060\ufeff]/gu;
@@ -213,20 +215,34 @@ export async function capturePage({ stepRatio = 0.6, dwellMs, maxSteps = 400, on
     const scoreOf = (el) => (el.textContent ? el.textContent.length : 0) * 1000 + el.querySelectorAll("*").length;
 
     const tables = new Map();
+    const tableStyles = createTableStyleCapture();
     function sampleTable(el) {
-      const table = el.querySelector("table");
-      if (!table?.rows.length) return;
+      let table = el.querySelector("table");
+      if (isAuxiliaryTable(table)) table = [...el.querySelectorAll('table')].find(candidate => {
+        if (isAuxiliaryTable(candidate)) return false;
+        for (let parent=candidate.parentElement;parent && parent !== el;parent=parent.parentElement) {
+          if (isAuxiliaryTable(parent)) return false;
+        }
+        return true;
+      });
+      if (!table) return;
+      const rows = logicalTableRows(el,table);
+      if (!rows.length) return;
       const id = el.getAttribute("data-block-id");
       if (!tables.has(id)) tables.set(id, { rows: new Map(), cells: new Map() });
       const state = tables.get(id);
+      state.columnWidths = tableStyles.columnWidths(table) || state.columnWidths;
       const offset = scroller.scrollTop - scroller.getBoundingClientRect().top;
-      let index = 0;
-      for (const row of table.rows) {
+      const auxiliaryCount = rows.filter(entry => entry.auxiliary).length;
+      const headerCount = rows.filter(entry => entry.section === 'thead').length;
+      let index = 0, headerIndex = -headerCount;
+      for (const {row,section,auxiliary} of rows) {
         const indexAttr = row.getAttribute("data-index");
-        const rowNum = indexAttr && /^\d+$/u.test(indexAttr) && Number.isSafeInteger(Number(indexAttr)) ? Number(indexAttr) : index;
-        index++;
+        const rowNum = section === 'thead' ? headerIndex++ : indexAttr && /^\d+$/u.test(indexAttr) && Number.isSafeInteger(Number(indexAttr)) ? Number(indexAttr) : index;
+        if (!auxiliary) index++;
         const keys = [];
         for (const cell of row.cells) {
+          if (tableStyles.isHiddenCell(cell)) continue;
           const col = keys.length;
           const key = cell.getAttribute("data-block-id") || cell.getAttribute("data-record-id") || rowNum + ":" + col;
           keys.push(key);
@@ -249,7 +265,7 @@ export async function capturePage({ stepRatio = 0.6, dwellMs, maxSteps = 400, on
           const rect = cell.getBoundingClientRect();
           const center = rect.height > 0 ? offset + rect.top + rect.height / 2 : previous?.center;
           if (previous?.ready && !ready) continue;
-          const html = cell.outerHTML;
+          const html = tableStyles.cellHtml(cell);
           if (previous?.html === html && previous.ready === ready) continue;
           const semantic = ready ? semanticContent(html, true) : null;
           if (previous?.ready && ready && previous.semantic && semantic && semantic.text.trim()
@@ -259,14 +275,13 @@ export async function capturePage({ stepRatio = 0.6, dwellMs, maxSteps = 400, on
             else continue;
           }
           if (!previous || (!previous.ready && ready) || (previous.ready === ready && length >= previous.length)) {
-            state.cells.set(key, { rowNum, col, ready, length, center, html, semantic });
+            state.cells.set(key, { rowNum:rowNum+(section === 'thead' ? headerCount : auxiliaryCount), col, ready, length, center, html, semantic });
           }
         }
         const existing = state.rows.get(rowNum);
-        if (!existing || (keys.length >= existing.keys.length && keys.some((key, i) => existing.keys[i] !== key))) {
+        if (!existing || existing.section !== section || (keys.length >= existing.keys.length && keys.some((key, i) => existing.keys[i] !== key))) {
           const shell = row.cloneNode(false).outerHTML;
-          const section = row.parentElement?.localName;
-          state.rows.set(rowNum, { keys, shell, section: section === "thead" || section === "tfoot" ? section : "tbody" });
+          state.rows.set(rowNum, { keys, shell, section });
         }
       }
     }
@@ -275,6 +290,7 @@ export async function capturePage({ stepRatio = 0.6, dwellMs, maxSteps = 400, on
       // 只在脱离页面的 HTML 语法树上替换表格行，保留块外壳、每格原始标记及合并属性。
       const fragment = parseFragment(block.html);
       function findTable(node) {
+        if (isAuxiliaryTable(node)) return;
         if (node.tagName === "table") return node;
         for (const child of node.childNodes || []) {
           const result = findTable(child);
@@ -301,7 +317,9 @@ export async function capturePage({ stepRatio = 0.6, dwellMs, maxSteps = 400, on
       const sections = [...groups].map(([tag, rows]) => "<" + tag + ">" + rows.join("") + "</" + tag + ">").join("");
       const rebuilt = parseFragment("<table>" + sections + "</table>").childNodes[0];
       for (const child of rebuilt.childNodes) child.parentNode = table;
-      table.childNodes = [...table.childNodes.filter(child => child.tagName === "caption" || child.tagName === "colgroup"), ...rebuilt.childNodes];
+      const columns = state.columnWidths ? parseFragment('<table>' + columnGroupHtml(state.columnWidths) + '</table>').childNodes[0].childNodes : null;
+      if (columns) for (const column of columns) column.parentNode = table;
+      table.childNodes = [...table.childNodes.filter(child => child.tagName === "caption" || !columns && child.tagName === "colgroup"), ...(columns || []), ...rebuilt.childNodes];
       block.html = serialize(fragment);
     }
 
@@ -695,9 +713,12 @@ export async function capturePage({ stepRatio = 0.6, dwellMs, maxSteps = 400, on
       if (reference.type === 'synced_reference') await auditReference(reference);
     }
     refreshRoots();
+    tableStyles.beginFinalReview();
     const tableBlocks = new Map([...blocks].filter(([, block]) => block.type === "table"));
     for (const block of tableBlocks.values()) {
       checkStop();
+      const currentTable = document.querySelector('[data-block-id="' + block.id + '"]');
+      if (currentTable) sampleTable(currentTable);
       async function sampleAt(y, done) {
         const maxTop = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
         scroller.scrollTop = Math.max(0, Math.min(maxTop, y - scroller.clientHeight / 2));

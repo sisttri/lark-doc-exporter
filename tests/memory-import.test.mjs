@@ -102,3 +102,26 @@ test('重新导入只跳过导出器的导航，普通nav正文仍保留', async
   assert.match(content, /普通导航/);
   assert.match(content, /保留标记/);
 });
+
+test('内存表格以有限字段保留列宽和单元格样式，HTML 往返比例不漂移', async () => {
+  const html = '<h1>样式表格</h1><table><colgroup><col width="1"><col width="2"><col width="3"></colgroup>' +
+    '<tr><td style="background-color:#123;color:rgb(255,255,255);text-align:center;vertical-align:bottom;position:fixed">甲</td>' +
+    '<td>乙</td><td>丙</td></tr></table>';
+  const memory = await parts(html);
+  const table = memory.blocks[1];
+  assert.deepEqual(table.columnWidths, [1667,3333,5000]);
+  assert.deepEqual(table.children[0].children[0].children[0], {
+    tag:'td',children:['甲'],background:'#112233',color:'#ffffff',align:'center',valign:'bottom',
+  });
+  const output = await (await renderFile('html', memory)).blob.text();
+  const reimported = await parts(output);
+  function findTable(nodes) {
+    for (const node of nodes) if (typeof node === 'object') {
+      if (node.tag === 'table') return node;
+      const found = findTable(node.children ?? []);
+      if (found) return found;
+    }
+  }
+  assert.deepEqual(findTable(reimported.blocks), table);
+  assert.doesNotMatch(output, /position:fixed/u);
+});

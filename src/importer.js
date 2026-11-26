@@ -1,5 +1,6 @@
 import { defaultTreeAdapter, parse } from 'parse5';
 import { warningMarker, warnings as warningTypes } from './shared.js';
+import { readCellStyle, readTableColumnWidths } from './table-style.js';
 
 const MiB = 1024 * 1024;
 export const limits = { html: 8 * MiB, entry: 24 * MiB, expanded: 48 * MiB, entries: 384 };
@@ -351,10 +352,16 @@ async function documentModel(html, files, fallback) {
       if (!['br', 'hr'].includes(tag)) item.children = children;
       if (tag === 'h1' && !firstHeading) firstHeading = nodeText(item).trim();
       if (tag === 'td' || tag === 'th') {
+        Object.assign(item, readCellStyle(attr(node, 'style'), {
+          align:attr(node, 'align'),valign:attr(node, 'valign'),bgcolor:attr(node, 'bgcolor'),
+        }));
         for (const span of ['colspan', 'rowspan']) {
           const value = Number(attr(node, span));
           if (Number.isInteger(value) && value >= 2 && value <= 64) item[span] = value;
         }
+      } else if (tag === 'table') {
+        const widths = readTableColumnWidths(node);
+        if (widths) item.columnWidths = widths;
       } else if (tag === 'ol') {
         const value = attr(node, 'start');
         if (/^-?\d{1,6}$/u.test(value) && Number(value) !== 1) item.start = Number(value);

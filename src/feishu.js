@@ -3,6 +3,7 @@
 // 完整 HTML 文档。纯函数：不读写文件、不访问网络、不产生时间戳，相同输入输出完全一致。
 import { parseFragment } from 'parse5';
 import { warningMarker } from './shared.js';
+import { cellStyleText, columnGroupHtml, isAuxiliaryTable, logicalTableRows, readCellStyle, readTableColumnWidths } from './table-style.js';
 
 const ZERO_WIDTH = /[\u200b\ufeff\u2060]/gu;
 const MIME_EXTENSIONS = Object.freeze({
@@ -62,6 +63,28 @@ function isHidden(node) {
   return node.attrs?.some(({name, value}) => name === 'hidden' || (name === 'aria-hidden' && value === 'true')) ||
     /(?:^|;)\s*(?:display\s*:\s*none|visibility\s*:\s*hidden)(?:\s*!important)?\s*(?:;|$)/iu.test(nodeAttr(node, 'style')) ||
     ['doc-cover-toolbar', 'docx-popup-container', 'layer-popup'].some(name => hasClass(node, name));
+}
+
+function hasFinalDisplayNone(style) {
+  // Unknown escaping/comments cannot establish that a source cell is absent.
+  if (/\\|\/\*/u.test(style)) return false;
+  let display = '', important = false, start = 0, depth = 0, quote = '';
+  for (let index = 0; index <= style.length; index++) {
+    const char = style[index];
+    if (quote) { if (char === quote) quote = ''; continue; }
+    if (char === '"' || char === "'") { quote = char; continue; }
+    if (char && '([{'.includes(char)) depth++;
+    if (char && ')]}'.includes(char) && --depth < 0) return false;
+    if (index !== style.length && (char !== ';' || depth)) continue;
+    const match = /^\s*display\s*:\s*(.*?)\s*$/iu.exec(style.slice(start, index));
+    start = index + 1;
+    if (!match) continue;
+    const priority = /!\s*important\s*$/iu.test(match[1]);
+    if (important && !priority) continue;
+    display = match[1].replace(/!\s*important\s*$/iu, '').trim().toLowerCase();
+    important = priority;
+  }
+  return !quote && !depth && display === 'none';
 }
 
 function isHiddenOrControl(node) {
@@ -624,6 +647,10 @@ export function convertCapture(capture) {
       const value = Number.parseInt(nodeAttr(cell, span), 10);
       if (Number.isInteger(value) && value >= 2) attributes += ' ' + span + '="' + value + '"';
     }
+    const style = cellStyleText(readCellStyle(nodeAttr(cell, 'style'), {
+      align:nodeAttr(cell, 'align'),valign:nodeAttr(cell, 'valign'),bgcolor:nodeAttr(cell, 'bgcolor'),
+    }));
+    if (style) attributes += ' style="' + style + '"';
     const blocks = collectCellBlocks(cell, addWarning);
     let content;
     if (blocks.length) content = joinCellFragments(renderCellSequence(blocks));
@@ -632,13 +659,24 @@ export function convertCapture(capture) {
   }
 
   function renderTable(info) {
-    const table = findFirstElement(info.element, (element) => element.tagName === 'table');
+    function findTable(node) {
+      if (node.tagName === 'table') return isAuxiliaryTable(node) ? null : node;
+      for (const child of childElements(node)) {
+        const found = findTable(child);
+        if (found) return found;
+      }
+      return null;
+    }
+    const table = findTable(info.element);
     if (!table) {
       addWarning('unsupported_block', '表格块 ' + info.id + ' 无法解析');
       return null;
     }
     function renderRow(row) {
-      const cells = childElements(row).filter((cell) => cell.tagName === 'td' || cell.tagName === 'th');
+      const cells = childElements(row).filter((cell) =>
+        (cell.tagName === 'td' || cell.tagName === 'th') &&
+        !cell.attrs?.some(({name, value}) => name === 'hidden' || (name === 'aria-hidden' && value === 'true')) &&
+        !hasFinalDisplayNone(nodeAttr(cell, 'style')));
       return cells.length ? '<tr>' + cells.map(renderTableCell).join('') + '</tr>' : '';
     }
     const parts = [];
@@ -646,15 +684,23 @@ export function convertCapture(capture) {
       if (child.tagName === 'caption') {
         const content = renderLines(child) || renderInline(child.childNodes, false);
         parts.push('<caption>' + content + '</caption>');
-      } else if (child.tagName === 'tr') {
-        parts.push(renderRow(child));
-      } else if (['thead', 'tbody', 'tfoot'].includes(child.tagName)) {
-        const rows = childElements(child).filter((row) => row.tagName === 'tr').map(renderRow).join('');
-        if (rows) parts.push('<' + child.tagName + '>' + rows + '</' + child.tagName + '>');
       }
     }
+    let group, section, rowParts = [];
+    function flushRows() {
+      if (rowParts.length) parts.push('<' + section + '>' + rowParts.join('') + '</' + section + '>');
+      rowParts = [];
+    }
+    for (const entry of logicalTableRows(info.element, table)) {
+      if (group !== entry.group || section !== entry.section) flushRows();
+      group = entry.group; section = entry.section;
+      const rendered = renderRow(entry.row);
+      if (rendered) rowParts.push(rendered);
+    }
+    flushRows();
     const content = parts.join('');
-    return content ? '<table>' + content + '</table>' : null;
+    const columns = columnGroupHtml(readTableColumnWidths(table));
+    return content ? '<table' + (columns ? ' style="table-layout:fixed;width:100%;overflow-wrap:anywhere"' : '') + '>' + columns + content + '</table>' : null;
   }
 
   function renderBlock(info) {

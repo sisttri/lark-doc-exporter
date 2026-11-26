@@ -587,11 +587,193 @@ test('表格已就绪单元格的等长文本和删除线更新进入重建结�
   });
 });
 
+for (const nested of [false, true]) {
+  test((nested ? '引用内' : '根级') + '表格保留实际列宽与迟到CSS样式，稳定节点只读取两次且不改原文', async t => {
+    const session = virtualDocument(t, {textIds:[], totalHeight:600});
+    const doc = globalThis.document, page = doc.querySelector('.page-block');
+    const all = doc.querySelectorAll, one = doc.querySelector;
+    const reads = new Map();
+    const computed = {backgroundColor:'rgba(0, 0, 0, 0)',color:'rgb(255, 255, 255)',textAlign:'start',verticalAlign:'middle',direction:'rtl'};
+    doc.defaultView = {getComputedStyle(node) {
+      reads.set(node, (reads.get(node) || 0) + 1);
+      return {...computed, backgroundColor:node.localName === 'tr' ? session.elapsed() >= 1000 ? 'rgb(32, 48, 64)' : 'rgb(255, 0, 0)' : computed.backgroundColor};
+    }};
+    const cells = ['原文甲','原文乙'].map((text, index) => ({
+      nodeType:1, localName:'td', ownerDocument:doc, textContent:text,
+      outerHTML:'<td class="theme-cell" style="padding:3px;--fill:var(--theme)">' + text + '</td>',
+      getAttribute:() => null, querySelectorAll:() => [],
+      getBoundingClientRect:() => ({top:0,bottom:20,height:20,width:index === 0 ? 120 : 280}),
+    }));
+    const row = {nodeType:1,localName:'tr',ownerDocument:doc,cells,getAttribute:() => '0',cloneNode:() => ({outerHTML:'<tr></tr>'})};
+    for (const cell of cells) cell.parentElement = row;
+    const table = {nodeType:1,localName:'table',ownerDocument:doc,rows:[row],children:[],
+      get outerHTML() {return '<table><tbody><tr>' + cells.map(cell => cell.outerHTML).join('') + '</tr></tbody></table>';}};
+    row.parentElement = table;
+    const reference = {
+      getAttribute:key => ({'data-block-id':'2','data-block-type':'synced_reference'})[key] ?? null,
+      parentElement:{closest:() => page}, textContent:'原文甲原文乙', querySelectorAll:() => [],
+      get outerHTML() {return '<div data-block-id="2" data-block-type="synced_reference">' + block.outerHTML + '</div>';},
+      getBoundingClientRect:() => ({top:0,bottom:20,height:20}),
+    };
+    const block = {
+      getAttribute:key => ({'data-block-id':nested ? '3' : '2','data-block-type':'table'})[key] ?? null,
+      parentElement:{closest:() => nested ? reference : page}, textContent:'原文甲原文乙',
+      get outerHTML() {return '<div data-block-id="' + (nested ? '3' : '2') + '" data-block-type="table">' + table.outerHTML + '</div>';},
+      querySelector:selector => selector === 'table' ? table : null, querySelectorAll:() => [],
+      getBoundingClientRect:() => ({top:0,bottom:20,height:20}),
+    };
+    const original = block.outerHTML;
+    doc.querySelectorAll = selector => selector === '[data-block-id]' ? [page,...(nested ? [reference] : []),block] : all(selector);
+    doc.querySelector = selector => selector === '[data-block-id="' + (nested ? '3' : '2') + '"]' ? block
+      : nested && selector === '[data-block-id="2"]' ? reference : one(selector);
+    const result = await capturePage({onProgress:session.onProgress});
+    const html = result.blocks[0].html;
+    assert.match(html, /<col style="width:30%"><col style="width:70%">/);
+    assert.match(html, /padding:3px;--fill:var\(--theme\);background-color:#203040;color:#ffffff;text-align:right;vertical-align:middle/);
+    assert.equal(block.outerHTML, original, '只改离线副本');
+    for (const node of [...cells,row]) assert.equal(reads.get(node), 2, '普通采集和最终复核各读一次');
+    assert.deepEqual(result.warnings, []);
+  });
+}
+
+for (const nested of [false,true]) {
+  test((nested ? '引用内' : '根级')+'跨行表格跳过隐藏占位，导出保留五列且没有ghost单元格', async t => {
+    virtualDocument(t,{textIds:[],totalHeight:600});
+    const doc=globalThis.document,page=doc.querySelector('.page-block'),all=doc.querySelectorAll,one=doc.querySelector;
+    const reads = new Map();
+    doc.defaultView={getComputedStyle(node) {
+      reads.set(node,(reads.get(node)||0)+1);
+      return {display:node.ghost?'none':'table-cell',backgroundColor:'transparent',color:'rgb(0, 0, 0)',textAlign:'left',verticalAlign:'top',direction:'ltr'};
+    }};
+    const rows=Array.from({length:3},(_,r)=>({
+      nodeType:1,localName:'tr',ownerDocument:doc,getAttribute:name=>name==='data-index'?String(r):null,
+      cloneNode:()=>({outerHTML:'<tr></tr>'}),
+      cells:Array.from({length:5},(_,c)=>{
+        const ghost=r>0&&c===0,id='r'+r+'c'+c;
+        return {nodeType:1,localName:'td',ownerDocument:doc,ghost,textContent:ghost?'ghost':id,
+          getAttribute:name=>({'data-block-id':id,rowspan:r===0&&c===0?'3':'1',colspan:'1',style:ghost?'display:none':null})[name]??null,
+          outerHTML:'<td data-block-id="'+id+'"'+(r===0&&c===0?' rowspan="3"':'')+(ghost?' style="display:none"':'')+'>'+(ghost?'ghost':id)+'</td>',
+          querySelectorAll:()=>[],getBoundingClientRect:()=>({top:0,bottom:20,height:20,width:ghost?0:146}),
+        };
+      }),
+    }));
+    const group={localName:'colgroup',children:Array.from({length:5},()=>({localName:'col',getAttribute:()=>null,getBoundingClientRect:()=>({width:146})}))};
+    const table={nodeType:1,localName:'table',ownerDocument:doc,rows,children:[group],
+      get outerHTML(){return '<table><colgroup>'+Array(5).fill('<col>').join('')+'</colgroup><tbody>'+rows.map(row=>'<tr>'+row.cells.map(cell=>cell.outerHTML).join('')+'</tr>').join('')+'</tbody></table>';}};
+    for(const row of rows){row.parentElement=table;for(const cell of row.cells)cell.parentElement=row;}
+    const reference={getAttribute:name=>({'data-block-id':'2','data-block-type':'synced_reference'})[name]??null,
+      parentElement:{closest:()=>page},textContent:'synthetic',querySelectorAll:()=>[],
+      get outerHTML(){return '<div data-block-id="2" data-block-type="synced_reference">'+block.outerHTML+'</div>';},
+      getBoundingClientRect:()=>({top:0,bottom:20,height:20})};
+    const block={getAttribute:name=>({'data-block-id':nested?'3':'2','data-block-type':'table'})[name]??null,
+      parentElement:{closest:()=>nested?reference:page},textContent:'synthetic',querySelectorAll:()=>[],
+      get outerHTML(){return '<div data-block-id="'+(nested?'3':'2')+'" data-block-type="table">'+table.outerHTML+'</div>';},
+      querySelector:selector=>selector==='table'?table:null,getBoundingClientRect:()=>({top:0,bottom:20,height:20})};
+    const original=block.outerHTML;
+    doc.querySelectorAll=selector=>selector==='[data-block-id]'?[page,...(nested?[reference]:[]),block]:all(selector);
+    doc.querySelector=selector=>selector==='[data-block-id="'+(nested?'3':'2')+'"]'?block:nested&&selector==='[data-block-id="2"]'?reference:one(selector);
+    const result=await capturePage();
+    const html=result.blocks[0].html;
+    assert.equal((html.match(/<col style="width:20%">/gu)||[]).length,5);
+    assert.equal((html.match(/<td\b/gu)||[]).length,13);
+    assert.doesNotMatch(html,/ghost|display:none/);
+    assert.match(html,/rowspan="3"/);
+    assert.equal(block.outerHTML,original);
+    for(const row of rows)for(const cell of row.cells)assert.equal(reads.get(cell),2,'隐藏判断与内容采集每阶段共享一次计算样式');
+    assert.deepEqual(result.warnings,[]);
+  });
+}
+
 test('同节点迟到正文不能被短暂稳定的空占位提前跳过',async t=>{
   const session=changingText(t,{late:true});
   const result=await capturePage({onProgress:session.onProgress});
   assert.match(result.blocks[0].html,/原文/);
   assert.ok(!result.warnings.some(w=>w.code==='capture_content_changed'));
+});
+
+for (const [nested,separateHeader,headerOnly,partialHeader] of [[false,false],[true,false],[false,true],[true,true],[false,true,true],[false,true,false,true]]) {
+  test((nested?'引用内':'根级')+(partialHeader?'表格按原顺序补齐部分重复sticky表头':headerOnly?'空主表仍合入独立sticky表头':separateHeader?'表格合并独立sticky表头与正文':'表格忽略前置sticky表头副本')+'，完整正文列宽和样式进入主表', async t => {
+    virtualDocument(t,{textIds:[],totalHeight:600});
+    const doc=globalThis.document,page=doc.querySelector('.page-block'),all=doc.querySelectorAll,one=doc.querySelector;
+    doc.defaultView={getComputedStyle:node=>({display:'table-cell',backgroundColor:node.syntheticAux?'rgb(170, 17, 34)':'rgb(16, 32, 48)',color:'rgb(255, 255, 255)',textAlign:'center',verticalAlign:'bottom',direction:'ltr'})};
+    const widths=[100,200,300,200,200];
+    function makeTable(sticky) {
+      const table={nodeType:1,localName:'table',ownerDocument:doc,
+        classList:{contains:token=>(sticky?'sticky-row-wrapper':'table header-row').split(' ').includes(token)},
+        getAttribute:name=>name==='class'?sticky?'sticky-row-wrapper':'table header-row':null,
+        rows:Array.from({length:sticky?partialHeader?2:1:headerOnly?0:3},(_,r)=>{
+          const row={nodeType:1,localName:'tr',ownerDocument:doc,getAttribute:name=>name==='data-index'?String(r):null,cloneNode:()=>({outerHTML:'<tr></tr>'})};
+          row.cells=Array.from({length:5},(_,c)=>{
+            const sourceRow=partialHeader?sticky||r===0?r:r+1:separateHeader&&!sticky?r+1:r;
+            const text=(sourceRow===0?'SOURCE_H':partialHeader&&sticky&&r===1?'SOURCE_SECOND_H':'BODY_'+sourceRow+'_')+c,id='cell-'+sourceRow+'-'+c;
+            const cell={nodeType:1,localName:'td',ownerDocument:doc,textContent:text,parentElement:row,syntheticAux:sticky,
+              getAttribute:name=>({'data-block-id':id,'data-block-type':'table_cell'})[name]??null,
+              get outerHTML(){return '<td data-block-id="'+id+'" data-block-type="table_cell">'+part.outerHTML+'</td>';},
+              getBoundingClientRect:()=>({top:0,bottom:20,height:20,width:sticky?146:widths[c]}),
+              querySelectorAll:selector=>selector==='[data-block-type]'||selector==='*'?[part]:[],
+            };
+            const part={parentElement:{closest:()=>cell},textContent:text,
+              getAttribute:name=>({'data-block-id':'text-'+sourceRow+'-'+c,'data-block-type':'text'})[name]??null,
+              outerHTML:'<div data-block-id="text-'+sourceRow+'-'+c+'" data-block-type="text"><div class="ace-line"><span data-string="true">'+text+'</span></div></div>',
+              querySelector:()=>({}),querySelectorAll:()=>[],classList:{contains:()=>false},getBoundingClientRect:()=>({top:0,bottom:20,height:20}),
+            };
+            cell.part=part;
+            return cell;
+          });
+          row.closest=()=>block;
+          return row;
+        }),
+        children:[{localName:'colgroup',children:widths.map(width=>({localName:'col',getAttribute:()=>null,getBoundingClientRect:()=>({width:sticky?146:width})}))}],
+        get outerHTML(){return '<table class="'+this.getAttribute('class')+'"><colgroup>'+Array(5).fill('<col>').join('')+'</colgroup><tbody>'+this.rows.map(row=>'<tr data-index="'+row.getAttribute('data-index')+'">'+row.cells.map(cell=>cell.outerHTML).join('')+'</tr>').join('')+'</tbody></table>';},
+      };
+      for(const row of table.rows)row.parentElement=table;
+      return table;
+    }
+    const sticky=makeTable(true),main=makeTable(false);
+    const reference={getAttribute:name=>({'data-block-id':'2','data-block-type':'synced_reference'})[name]??null,
+      parentElement:{closest:()=>page},textContent:'synthetic',querySelectorAll:()=>[],
+      get outerHTML(){return '<div data-block-id="2" data-block-type="synced_reference">'+block.outerHTML+'</div>';},
+      getBoundingClientRect:()=>({top:0,bottom:20,height:20})};
+    const block={getAttribute:name=>({'data-block-id':nested?'3':'2','data-block-type':'table'})[name]??null,
+      parentElement:{closest:()=>nested?reference:page},textContent:'synthetic',children:[sticky,main],
+      get outerHTML(){return '<div data-block-id="'+(nested?'3':'2')+'" data-block-type="table">'+sticky.outerHTML+main.outerHTML+'</div>';},
+      querySelector:selector=>selector==='table'?sticky:null,querySelectorAll:selector=>selector==='table'?[sticky,main]:[],
+      getBoundingClientRect:()=>({top:0,bottom:20,height:20})};
+    sticky.parentElement=main.parentElement=block;
+    const original=block.outerHTML;
+    const descendants=[...sticky.rows,...main.rows].flatMap(row=>row.cells.flatMap(cell=>[cell,cell.part]));
+    doc.querySelectorAll=selector=>selector==='[data-block-id]'?[page,...(nested?[reference]:[]),block,...descendants]:all(selector);
+    doc.querySelector=selector=>selector==='[data-block-id="'+(nested?'3':'2')+'"]'?block:nested&&selector==='[data-block-id="2"]'?reference:one(selector);
+    const result=await capturePage();
+    const html=result.blocks[0].html,converted=convertCapture(result);
+    if(!headerOnly) {
+      assert.match(html,/class="table header-row"><colgroup><col style="width:10%"><col style="width:20%"><col style="width:30%">/);
+      assert.match(converted.html,/background-color:#102030;color:#ffffff;text-align:center;vertical-align:bottom/);
+    }
+    assert.equal((converted.html.match(/<tr\b/gu)||[]).length,headerOnly?1:separateHeader?4:3);
+    assert.equal((converted.html.match(/<td\b/gu)||[]).length,headerOnly?5:separateHeader?20:15);
+    if(separateHeader) {
+      assert.match(html,/class="table header-row">[\s\S]*?<thead><tr>/);
+      assert.match(converted.html,/<thead>[\s\S]*?background-color:#aa1122;color:#ffffff/);
+      for(const cell of sticky.rows[0].cells)assert.equal(converted.html.split(cell.textContent).length-1,1);
+      if(partialHeader) assert.ok(converted.html.indexOf('SOURCE_H0')<converted.html.indexOf('SOURCE_SECOND_H0'),'保留main前缀表头，再接缺失的aux表头');
+    } else assert.doesNotMatch(converted.html,/background-color:#aa1122/);
+    for(const row of main.rows)for(const cell of row.cells)assert.equal(converted.html.split(cell.textContent).length-1,1);
+    assert.equal(block.outerHTML,original);
+    assert.deepEqual(result.warnings,[]);
+  });
+}
+
+test('表格主体尚未挂载时保留未确认提示，不因空table选择崩溃', async t => {
+  virtualDocument(t,{textIds:[],totalHeight:600});
+  const doc=globalThis.document,page=doc.querySelector('.page-block'),all=doc.querySelectorAll,one=doc.querySelector;
+  const block={getAttribute:name=>({'data-block-id':'2','data-block-type':'table'})[name]??null,
+    parentElement:{closest:()=>page},textContent:'loading',outerHTML:'<div data-block-id="2" data-block-type="table"></div>',
+    querySelector:()=>null,querySelectorAll:()=>[],getBoundingClientRect:()=>({top:0,bottom:20,height:20})};
+  doc.querySelectorAll=selector=>selector==='[data-block-id]'?[page,block]:all(selector);
+  doc.querySelector=selector=>selector==='[data-block-id="2"]'?block:one(selector);
+  const result=await capturePage();
+  assert.ok(result.warnings.some(warning=>warning.code==='table_structure_unconfirmed'));
 });
 
 test('自适应等待在稳定段落上少于固定380ms，显式固定模式仍可对照',async t=>{

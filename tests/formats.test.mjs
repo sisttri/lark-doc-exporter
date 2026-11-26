@@ -204,6 +204,52 @@ last</code></pre>`});
   assert.match(markdown, /^\x60{4}\nfirst\n\x60{3}\nlast\n\x60{4}$/m);
 });
 
+test('Markdown 表格有样式时保留安全 HTML，普通表格仍使用管道语法', async () => {
+  const snapshot = await readDocumentParts({html:'<h1>表格样式</h1>' +
+    '<table><colgroup><col width="1"><col width="3"></colgroup><tr><th>宽度</th><th>保留</th></tr><tr><td>甲</td><td>乙</td></tr></table>' +
+    '<table><tr><th style="background-color:#123;color:#fff;text-align:center;vertical-align:middle">底色</th><th>保留</th></tr><tr><td>丙</td><td>丁</td></tr></table>' +
+    '<table><tr><th>普通</th><th>表格</th></tr><tr><td>戊</td><td>己</td></tr></table>'});
+  const markdown = new TextDecoder().decode((await zipResult('markdown', snapshot))['表格样式.md']);
+  assert.match(markdown, /<colgroup><col style="width:25%"><col style="width:75%"><\/colgroup>/u);
+  assert.match(markdown, /<th style="background-color:#112233;color:#ffffff;text-align:center;vertical-align:middle">底色<\/th>/u);
+  assert.match(markdown, /\| 普通 \| 表格 \|\n\| --- \| --- \|/u);
+  assert.doesNotMatch(markdown, /table-scroll/u);
+});
+
+test('表格导出复验伪造中立树，不允许字段注入 CSS 或属性', async () => {
+  const snapshot = {title:'伪造样式',assets:[],warnings:[],blocks:[{
+    tag:'table',columnWidths:[25,'75%;background:url(https://bad.invalid/x)'],children:[{
+      tag:'tbody',children:[{tag:'tr',children:[{
+        tag:'td',background:'#fff;position:fixed',color:'red',align:'right" onclick="alert(1)',valign:'url(https://bad.invalid/x)',children:['安全文字'],
+      }]}],
+    }],
+  }]};
+  const output = await (await renderFile('html', snapshot)).blob.text();
+  assert.match(output, /<table><tbody><tr><td>安全文字<\/td>/u);
+  assert.doesNotMatch(output, /bad\.invalid|onclick|position:fixed|color:red|alert\(1\)/u);
+});
+
+test('深色表格内的代码与链接继承单元格对比色，外部内容仍保持默认样式', async () => {
+  const snapshot = await readDocumentParts({html:'<h1>深色对比</h1>' +
+    '<pre><code>表格外代码</code></pre><p><a href="https://example.org/outside">表格外链接</a></p>' +
+    '<table><tr><td style="background-color:#123;color:#fff"><div>' +
+    '<pre><code>深色格代码</code></pre><p><a href="https://example.org/dark"><u>深色格链接</u></a></p>' +
+    '<table><tr><td style="background-color:#fff;color:#000"><pre><code>内层浅色格代码</code></pre>' +
+    '<a href="https://example.org/nested">内层浅色格链接</a></td></tr></table></div></td></tr></table>'});
+  const output = await (await renderFile('html', snapshot)).blob.text();
+  const markdown = new TextDecoder().decode((await zipResult('markdown', snapshot))['深色对比.md']);
+  for (const rendered of [output, markdown]) {
+    assert.match(rendered, /<pre style="color:inherit;background:transparent"><code>深色格代码<\/code><\/pre>/u);
+    assert.match(rendered, /<a href="https:\/\/example\.org\/dark" rel="noopener noreferrer" style="color:inherit"><u>深色格链接<\/u><\/a>/u);
+    assert.match(rendered, /<td style="background-color:#ffffff;color:#000000"><pre style="color:inherit;background:transparent"><code>内层浅色格代码<\/code><\/pre>/u);
+    assert.match(rendered, /<a href="https:\/\/example\.org\/nested" rel="noopener noreferrer" style="color:inherit">内层浅色格链接<\/a>/u);
+  }
+  assert.match(output, /<pre><code>表格外代码<\/code><\/pre>/u);
+  assert.match(output, /<a href="https:\/\/example\.org\/outside" rel="noopener noreferrer">表格外链接<\/a>/u);
+  assert.match(markdown, /\[表格外链接\]\(https:\/\/example\.org\/outside\)/u);
+  assert.match(markdown, /\x60{3}\n表格外代码\n\x60{3}/u);
+});
+
 test('memory assets reject traversal and portable path collisions', async () => {
   for (const paths of [
     { 'attachments/../bad.txt': strToU8('x') },

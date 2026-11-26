@@ -45,6 +45,156 @@ test('PDF keeps merged cell geometry, true headers, and wide-table fallback with
   assert.match(JSON.stringify(wide.doc.content), /Cell 12/);
 });
 
+test('PDF preserves source outer-column proportions within each table width', () => {
+  const table = tableOf([['A', 'A description much longer than its neighbors', 'C']]);
+  table.columnWidths = [2000,3000,5000];
+  const {doc} = pdfDefinition(documentOf([table]));
+  const {widths} = firstTable(doc);
+  for (const [index, expected] of [94.256,137.384,247.64].entries()) assert.ok(Math.abs(widths[index] - expected) < .001, JSON.stringify(widths));
+  const nested = n('table', [n('tr', [n('td', [n('table', [n('tr', [n('td', ['Inner A']),n('td', ['Inner B'])])], {columnWidths:[2500,7500]})]),n('td', ['Neighbor'])])], {columnWidths:[6000,4000]});
+  const outer = firstTable(pdfDefinition(documentOf([nested])).doc);
+  const inner = outer.body[0][0].stack.find(item => item.table).table;
+  assert.ok(Math.abs(inner.widths[0] + 8 - outer.widths[0] / 4) < .001);
+  assert.ok(Math.abs(inner.widths[1] + 8 - outer.widths[0] * .75) < .001);
+  const single = tableOf([['Single']]);
+  single.columnWidths = [10000];
+  assert.deepEqual(firstTable(pdfDefinition(documentOf([single])).doc).widths, [pageWidth]);
+});
+
+test('PDF clamps narrow source columns and redistributes the remaining width without overflow', () => {
+  for (const columnWidths of [[1,1,9998], [2000,1,7999], [1,9997,1,1], [9199,800,1]]) {
+    const table = tableOf([columnWidths.map(() => 'Cell')]);
+    table.columnWidths = columnWidths;
+    const {widths} = firstTable(pdfDefinition(documentOf([table])).doc);
+    assert.ok(widths.every(width => Number.isFinite(width) && width >= 24));
+    for (const [index, ratio] of columnWidths.entries()) if (ratio === 1) assert.equal(widths[index], 24);
+    if (columnWidths[0] === 9199) assert.equal(widths[1], 24);
+    if (columnWidths[0] === 2000) assert.ok(Math.abs((widths[0] + 8) / (widths[2] + 8) - 2000 / 7999) < .00001);
+    assert.ok(Math.abs(widths.reduce((sum, width) => sum + width, 0) + (widths.length - 1) * 16 - pageWidth) < .001);
+  }
+  const table = tableOf([['Short', 'A much longer description '.repeat(12), 'C']]);
+  const fallback = firstTable(pdfDefinition(documentOf([table])).doc).widths;
+  for (const columnWidths of [[5000,5000], [5000,0,5000], '2000,3000,5000']) {
+    assert.deepEqual(firstTable(pdfDefinition(documentOf([{...table,columnWidths}])).doc).widths, fallback);
+  }
+});
+
+test('real PDF applies source column proportions, cell fills, colors and native vertical alignment', async () => {
+  pdfmake.setUrlAccessPolicy(() => false);
+  pdfmake.setLocalAccessPolicy(path => /^Helvetica(?:-Bold|-Oblique|-BoldOblique)?$/.test(path));
+  pdfmake.addFonts({Noto:{normal:'Helvetica',bold:'Helvetica-Bold',italics:'Helvetica-Oblique',bolditalics:'Helvetica-BoldOblique'}});
+  const table = n('table', [n('tr', [
+    n('td', ['Top\n' + 'Tall\n'.repeat(7)], {background:'#ff0000',color:'#112233',align:'left',valign:'top'}),
+    n('td', ['Middle'], {background:'#00ff00',color:'#112233',align:'center',valign:'middle'}),
+    n('td', ['Bottom'], {background:'#0000ff',color:'#112233',align:'right',valign:'bottom'}),
+  ])], {columnWidths:[2000,3000,5000]});
+  const {doc} = pdfDefinition(documentOf([table]));
+  const widths = firstTable(doc).widths.slice();
+  doc.compress = false;
+  const pdf = pdfmake.createPdf(doc), stream = await pdf.getStream();
+  const items = stream._pdfMakePages.flatMap(page => page.items);
+  const fills = items.filter(({type,item}) => type === 'vector' && ['#ff0000','#00ff00','#0000ff'].includes(item.color)).map(({item}) => item);
+  assert.equal(fills.length, 3);
+  for (const [index,color] of ['#ff0000','#00ff00','#0000ff'].entries()) {
+    const fill = fills.find(item => item.color === color);
+    assert.ok(Math.abs(fill.w / pageWidth - [.2,.3,.5][index]) < .00001);
+    assert.ok(fill.x >= 42 && fill.x + fill.w <= 553.29);
+  }
+  const lines = items.filter(({type}) => type === 'line').map(({item}) => item);
+  const line = text => lines.find(item => item.inlines.map(run => run.text).join('') === text);
+  for (const text of ['Top','Middle','Bottom']) assert.ok(line(text).inlines.every(run => run.color === '#112233'));
+  const middleStart = 42 + widths[0] + 16;
+  const bottomEnd = 42 + pageWidth;
+  assert.ok(Math.abs(line('Middle').x - middleStart - (widths[1] - line('Middle').getWidth()) / 2) < .001);
+  assert.ok(Math.abs(line('Bottom').x + line('Bottom').getWidth() - bottomEnd) < .001);
+  const bytes = await pdf.getBuffer();
+  const translations = [...bytes.toString('latin1').matchAll(/1 0 0 1 0 ([\d.-]+) cm/g)].map(match => Number(match[1])).filter(value => value > 0);
+  assert.equal(translations.length, 2);
+  assert.ok(translations[0] > 10);
+  assert.ok(Math.abs(translations[1] - 2 * translations[0]) < .001);
+  assert.ok(bytes.subarray(0,5).equals(Buffer.from('%PDF-')));
+});
+
+test('real PDF keeps styled row and column spans and lets multipage cells flow from the top', async () => {
+  pdfmake.setUrlAccessPolicy(() => false);
+  pdfmake.setLocalAccessPolicy(path => /^Helvetica(?:-Bold|-Oblique|-BoldOblique)?$/.test(path));
+  pdfmake.addFonts({Noto:{normal:'Helvetica',bold:'Helvetica-Bold',italics:'Helvetica-Oblique',bolditalics:'Helvetica-BoldOblique'}});
+  const merged = n('table', [
+    n('tr', [n('td', ['Merged'], {colspan:2,rowspan:2,background:'#aabbcc',align:'center',valign:'middle'}),n('td', ['First\n' + 'Tall\n'.repeat(5)])]),
+    n('tr', [n('td', ['Second\n' + 'Tall\n'.repeat(5)])]),
+  ], {columnWidths:[2000,3000,5000]});
+  const longText = Array.from({length:180}, (_, index) => 'Line ' + index).join('\n');
+  const long = n('table', [n('tr', [n('td', [longText], {background:'#ddeeff',valign:'bottom'}),n('td', ['Neighbor'])])], {columnWidths:[6000,4000]});
+  const {doc} = pdfDefinition(documentOf([merged,long]));
+  doc.compress = false;
+  const pdf = pdfmake.createPdf(doc), stream = await pdf.getStream();
+  const pages = stream._pdfMakePages;
+  assert.ok(pages.length > 2);
+  const items = pages.flatMap(page => page.items);
+  const fills = items.filter(({type,item}) => type === 'vector' && item.color === '#aabbcc').map(({item}) => item);
+  assert.equal(fills.length, 2);
+  assert.ok(fills.every(fill => Math.abs(fill.w - pageWidth / 2) < .001));
+  assert.ok(Math.abs(fills[0].x - fills[1].x) < .001);
+  const begins = items.filter(({type}) => type === 'beginVerticalAlignment').map(({item}) => item);
+  assert.equal(begins.find(item => item.verticalAlignment === 'middle')?.isCellContentMultiPage, false);
+  assert.equal(begins.find(item => item.verticalAlignment === 'bottom')?.isCellContentMultiPage, true);
+  const text = items.filter(({type}) => type === 'line').map(({item}) => item.inlines.map(run => run.text).join('')).join('\n');
+  assert.match(text, /Line 179/);
+  const bytes = await pdf.getBuffer();
+  const translations = [...bytes.toString('latin1').matchAll(/1 0 0 1 0 ([\d.-]+) cm/g)].map(match => Number(match[1])).filter(value => value > 0);
+  assert.equal(translations.length, 1);
+  assert.ok(translations[0] > 20);
+});
+
+test('real PDF keeps nested content readable in colored cells without changing colors outside tables', async () => {
+  pdfmake.setUrlAccessPolicy(() => false);
+  pdfmake.setLocalAccessPolicy(path => /^(?:Helvetica|Courier)(?:-Bold|-Oblique|-BoldOblique)?$/.test(path));
+  pdfmake.addFonts({
+    Noto:{normal:'Helvetica',bold:'Helvetica-Bold',italics:'Helvetica-Oblique',bolditalics:'Helvetica-BoldOblique'},
+    Courier:{normal:'Courier',bold:'Courier-Bold',italics:'Courier-Oblique',bolditalics:'Courier-BoldOblique'},
+  });
+  const link = text => n('a', [text], {href:'https://example.org/readable'});
+  const code = text => n('pre', [n('code', [text])]);
+  const inline = text => n('p', [n('code', [text])]);
+  const nested = n('table', [n('thead', [n('tr', [n('th', ['Inherited header A']),n('th', ['Inherited header B'])])]),n('tr', [
+    n('td', [code('Inherited nested code'),inline('Inherited nested inline')]),
+    n('td', [n('p', [link('Own nested link')]),n('blockquote', ['Own nested quote']),code('Own nested code'),inline('Own nested inline')], {background:'#eeeeee',color:'#222222'}),
+  ])]);
+  const table = n('table', [n('tr', [n('td', [
+    n('p', ['Dark plain']),code('Dark block code'),n('blockquote', [n('p', ['Dark quote']),n('p', [link('Dark quote link')])]),n('img', [], {alt:'Dark image alt'}),
+    n('p', [link('Dark link')]),inline('Dark inline'),n('ul', [n('li', [link('Dark list link')])]),nested,
+  ], {background:'#111111',color:'#ffffff'})])]);
+  const {doc} = pdfDefinition(documentOf([
+    table,code('Outside block code'),n('blockquote', ['Outside quote']),n('p', [link('Outside link')]),inline('Outside inline'),n('p', ['Outside plain']),n('img', [], {alt:'Outside image alt'}),
+    n('table', [n('tr', [n('th', ['Outside header'])])]),
+  ]));
+  const pdf = pdfmake.createPdf(doc), stream = await pdf.getStream();
+  const runs = stream._pdfMakePages.flatMap(page => page.items.filter(({type}) => type === 'line').flatMap(({item}) => item.inlines));
+  const headerFills = stream._pdfMakePages.flatMap(page => page.items.filter(({type,item}) => type === 'vector' && item.color === '#e5eee8'));
+  assert.equal(headerFills.length, 1);
+  const colors = new Map([
+    ['Dark plain','#ffffff'],['Dark block code','#ffffff'],['Dark quote','#ffffff'],['Dark quote link','#ffffff'],
+    ['Dark link','#ffffff'],['Dark inline','#ffffff'],['Dark list link','#ffffff'],['Dark image alt','#ffffff'],
+    ['Inherited nested code','#ffffff'],['Inherited nested inline','#ffffff'],
+    ['Inherited header A','#ffffff'],['Inherited header B','#ffffff'],['Outside header','#202c25'],
+    ['Own nested link','#222222'],['Own nested quote','#222222'],['Own nested code','#222222'],['Own nested inline','#222222'],
+    ['Outside block code','#314d40'],['Outside quote','#4b6057'],['Outside link','#155e50'],['Outside inline','#202c25'],['Outside plain','#202c25'],['Outside image alt','#596960'],
+  ]);
+  for (const [text,color] of colors) {
+    const words = text.split(' ');
+    const start = runs.findIndex((_, index) => words.every((word, offset) => runs[index + offset]?.text.trim() === word));
+    assert.ok(start >= 0, text);
+    assert.ok(runs.slice(start, start + words.length).every(run => run.color === color), text);
+  }
+  for (const text of ['Dark inline','Inherited nested inline','Own nested inline']) {
+    const word = text.split(' ')[0];
+    assert.ok(runs.filter(run => run.text.trim() === word).every(run => !run.background), text);
+  }
+  assert.ok(runs.some(run => run.text.trim() === 'Outside' && run.background === '#edf1ee'));
+  assert.ok(runs.filter(run => run.link).every(run => [].concat(run.decoration || []).includes('underline')));
+  assert.ok((await pdf.getBuffer()).subarray(0,5).equals(Buffer.from('%PDF-')));
+});
+
 test('PDF lets large diagrams use the text width and does not enlarge small images', () => {
   const image = path => n('img', [], {path});
   const prepared = {

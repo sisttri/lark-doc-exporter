@@ -451,6 +451,114 @@ test('table 单元格按顺序输出多行多列，且无表头时全部是 td',
   assertAllowedTags(result.html);
 });
 
+test('table 合并单元格跳过显式隐藏占位，保留合法空格及 display:table-cell', () => {
+  const result = convertCapture(captureOf([tableBlock('ghost-cells',
+    '<tr><td rowspan="2" colspan="2">合并</td><td>甲</td></tr>' +
+    '<tr><td style="display:none;">隐藏占位一</td><td hidden>隐藏占位二</td><td>乙</td></tr>' +
+    '<tr><th aria-hidden="true">隐藏占位三</th><td style="DISPLAY: none !important">隐藏占位四</td>' +
+    '<td style="display:table-cell">丙</td><td> </td><td aria-hidden="false">丁</td></tr>',
+  )]));
+  const rows = elements(result.html, 'tr');
+  const cells = rows.map(row => row.childNodes.filter(node => node.tagName === 'td' || node.tagName === 'th'));
+  assert.deepEqual(cells.map(row => row.map(textOf)), [['合并','甲'],['乙'],['丙',' ','丁']]);
+  assert.equal(attrOf(cells[0][0], 'rowspan'), '2');
+  assert.equal(attrOf(cells[0][0], 'colspan'), '2');
+  assert.doesNotMatch(result.html, /隐藏占位|display:none/u);
+  assertAllowedTags(result.html);
+});
+
+test('table 隐藏占位遵循最终 display 声明与 important 优先级，未知值保守保留', () => {
+  const source = [
+    ['display:none;display:table-cell', 'VISIBLE_OVERRIDE'],
+    ['display:table-cell;display:none', 'HIDDEN_LAST'],
+    ['display:none!important;display:table-cell', 'HIDDEN_IMPORTANT'],
+    ['display:none;display:table-cell ! important', 'VISIBLE_IMPORTANT'],
+    ['display:none!important;display:table-cell!important', 'VISIBLE_IMPORTANT_LAST'],
+    ['display:table-cell!important;display:none', 'VISIBLE_IMPORTANT_FIRST'],
+    ['display:none;display:var(--cell-display)', 'UNKNOWN_DISPLAY'],
+    ['background-color:#123;color:#fff', 'UNRELATED_CSS'],
+    ['display:table-cell;--note:&quot;;display:none;&quot;', 'UNRELATED_QUOTED_CSS'],
+    ['background-color:rgb(1,2,3);display:none', 'HIDDEN_WITH_FUNCTION'],
+    ['display:table-cell', ' '],
+  ];
+  const row = source.map(([style, label]) => '<td style="' + style + '">' + label + '</td>').join('');
+  const result = convertCapture(captureOf([tableBlock('display-cascade', '<tr>' + row + '</tr>')]));
+  assert.deepEqual(elements(result.html, 'td').map(textOf), [
+    'VISIBLE_OVERRIDE','VISIBLE_IMPORTANT','VISIBLE_IMPORTANT_LAST','VISIBLE_IMPORTANT_FIRST',
+    'UNKNOWN_DISPLAY','UNRELATED_CSS','UNRELATED_QUOTED_CSS',' ',
+  ]);
+  assert.doesNotMatch(result.html, /HIDDEN_LAST|HIDDEN_IMPORTANT|HIDDEN_WITH_FUNCTION/u);
+});
+
+test('table 保留列宽比例和单元格底色、文字对比及对齐，丢弃其他 CSS', () => {
+  const result = convertCapture(captureOf([{
+    id:'styled-table',type:'table',html:'<div><table>' +
+      '<colgroup><col style="width:80px"><col span="2" width="120"></colgroup>' +
+      '<tr><td colspan="2" style="background-color:rgb(12,34,56);color:#fff;text-align:right;vertical-align:middle;position:fixed;background-image:url(https://bad.invalid/x)">深色</td>' +
+      '<td align="center" valign="bottom" bgcolor="#abc">末格</td></tr></table></div>',
+  }]));
+  assert.match(result.html, /<table style="table-layout:fixed;width:100%;overflow-wrap:anywhere"><colgroup><col style="width:25%"><col style="width:37.5%"><col style="width:37.5%"><\/colgroup>/u);
+  assert.match(result.html, /<td colspan="2" style="background-color:#0c2238;color:#ffffff;text-align:right;vertical-align:middle">深色<\/td>/u);
+  assert.match(result.html, /<td style="background-color:#aabbcc;text-align:center;vertical-align:bottom">末格<\/td>/u);
+  assert.doesNotMatch(result.html, /position:|background-image:|bad\.invalid/u);
+});
+
+test('table 跳过固定表头副本，在根级、引用和单元格引用中保留正文表格完整行与样式', () => {
+  const table = {id:'main-with-sticky',type:'table',html:'<div data-block-type="table" data-block-id="main-with-sticky">' +
+    '<table class="table sticky-row-wrapper"><tr><td data-block-id="header-a">正文标题一<table><tr><td>STICKY_NESTED</td></tr></table></td><td data-block-id="header-b">正文标题二</td></tr></table>' +
+    '<table class="table header-row"><colgroup><col width="1"><col width="3"></colgroup>' +
+    '<tr><th data-block-id="header-a">正文标题一</th><th data-block-id="header-b">正文标题二</th></tr>' +
+    '<tr><td style="background-color:#123;color:#fff;text-align:center;vertical-align:middle">正文甲</td><td>正文乙</td></tr>' +
+    '<tr><td>正文丙</td><td>正文丁</td></tr></table></div>'};
+  const reference = {id:'sticky-reference',type:'synced_reference',html:
+    '<div data-block-type="synced_reference" data-block-id="sticky-reference">' + table.html + '</div>'};
+  const outer = tableBlock('sticky-cell', '<tr><td>' + reference.html + '</td></tr>');
+  for (const [block, count] of [[table,1], [reference,1], [outer,2]]) {
+    const result = convertCapture(captureOf([block]));
+    const tables = elements(result.html, 'table');
+    assert.equal(tables.length, count);
+    const main = tables.at(-1);
+    assert.deepEqual(elements(main, 'tr').map(textOf), ['正文标题一正文标题二','正文甲正文乙','正文丙正文丁']);
+    assert.deepEqual(elements(main, 'col').map(col => attrOf(col, 'style')), ['width:25%','width:75%']);
+    assert.match(result.html, /<td style="background-color:#112233;color:#ffffff;text-align:center;vertical-align:middle">正文甲<\/td>/u);
+    assert.doesNotMatch(result.html, /STICKY_COPY|STICKY_NESTED/u);
+  }
+});
+
+test('table 独立固定表头按 cell ID 或文本去重，保留 caption、多 tbody 和表头样式', () => {
+  const header = '<tr><td data-block-id="header-os" style="background-color:#123;color:#fff;text-align:center;vertical-align:middle">系统</td>' +
+    '<td data-block-id="header-count">数量</td></tr>';
+  const body = '<tbody><tr><td data-block-id="rocky-os">Rocky</td><td data-block-id="rocky-count">2</td></tr>' +
+    '<tr><td data-block-id="ubuntu-os">Ubuntu</td><td data-block-id="ubuntu-count">3</td></tr></tbody>' +
+    '<tbody><tr><td data-block-id="total-os">合计</td><td data-block-id="total-count">5</td></tr></tbody>';
+  const wrap = main => ({id:'detached-header',type:'table',html:'<div data-block-type="table" data-block-id="detached-header">' +
+    '<table class="sticky-row-wrapper"><tbody>' + header + '</tbody></table>' +
+    '<table class="table header-row"><caption>系统统计</caption><colgroup><col width="1"><col width="3"></colgroup>' +
+    main + '</table></div>'});
+  for (const table of [wrap(body), wrap('<tbody>' + header + '</tbody>' + body)]) {
+    const result = convertCapture(captureOf([table]));
+    const main = elements(result.html, 'table')[0];
+    assert.deepEqual(elements(main, 'tr').map(textOf), ['系统数量','Rocky2','Ubuntu3','合计5']);
+    assert.equal(elements(main, 'thead').length, 1);
+    assert.equal(elements(main, 'tbody').length, 2);
+    assert.equal(textOf(elements(main, 'caption')[0]), '系统统计');
+    assert.deepEqual(elements(main, 'col').map(col => attrOf(col, 'style')), ['width:25%','width:75%']);
+    assert.match(result.html, /<thead><tr><td style="background-color:#112233;color:#ffffff;text-align:center;vertical-align:middle">系统<\/td><td>数量<\/td><\/tr><\/thead>/u);
+  }
+  const noIds = wrap('<tbody>' + header.replace(/ data-block-id="[^"]+"/gu, '') + '</tbody>' + body);
+  assert.deepEqual(elements(convertCapture(captureOf([noIds])).html, 'tr').map(textOf), ['系统数量','Rocky2','Ubuntu3','合计5']);
+  const explicit = wrap('<thead><tr><th>主表头一</th><th>主表头二</th></tr></thead>' + body);
+  assert.deepEqual(elements(convertCapture(captureOf([explicit])).html, 'tr').map(textOf), ['主表头一主表头二','Rocky2','Ubuntu3','合计5']);
+  const detached = wrap(body);
+  const reference = {id:'detached-reference',type:'synced_reference',html:
+    '<div data-block-type="synced_reference" data-block-id="detached-reference">' + detached.html + '</div>'};
+  for (const block of [reference, tableBlock('detached-cell', '<tr><td>' + reference.html + '</td></tr>')]) {
+    const main = elements(convertCapture(captureOf([block])).html, 'table').at(-1);
+    assert.deepEqual(elements(main, 'tr').map(textOf), ['系统数量','Rocky2','Ubuntu3','合计5']);
+    assert.equal(elements(main, 'thead').length, 1);
+  }
+});
+
 test('table 保留 caption 和 thead/tbody/tfoot，表头内的 td 仍属于 thead', () => {
   const result = convertCapture(captureOf([{
     id: 'sectioned-table',
