@@ -53,7 +53,7 @@ export async function prepareImages(snapshot) {
     (node.children || []).forEach(visit);
   }
   snapshot.blocks.forEach(visit);
-  const images = {}, names = new Map(), dimensions = new Map();
+  const images = {}, names = new Map(), dimensions = new Map(), slices = new Map();
   let pixels = 0, bytes = 0, renderedBytes = 0, skipped = 0, staticImages = 0;
   for (const asset of snapshot.assets) {
     if (asset.role !== 'image' || !referenced.has(asset.path)) continue;
@@ -64,30 +64,44 @@ export async function prepareImages(snapshot) {
       bitmap = await createImageBitmap(new Blob([asset.bytes], {type:asset.type}));
       pixels += bitmap.width * bitmap.height;
       if (pixels > 28e6) limit();
-      const scale = Math.min(1, 1600 / Math.max(bitmap.width, bitmap.height));
-      const width = Math.max(1, Math.round(bitmap.width * scale)), height = Math.max(1, Math.round(bitmap.height * scale));
-      let preparedBytes;
-      if (asset.type === 'image/png' && scale === 1 && staticPng(asset.bytes)) {
-        preparedBytes = asset.bytes;
-      } else {
-        const canvas = new OffscreenCanvas(width, height);
-        canvas.getContext('2d').drawImage(bitmap, 0, 0, width, height);
-        const rendered = await canvas.convertToBlob({type:'image/png'});
-        preparedBytes = new Uint8Array(await rendered.arrayBuffer());
+      const {width,height} = bitmap;
+      const displayWidth = Math.min(PAGE_WIDTH,width * .75);
+      const sliceHeight = Math.max(1,Math.floor(MAX_IMAGE_HEIGHT * width / displayWidth));
+      const entries = [], parts = [];
+      let assetBytes = 0;
+      for (let top = 0; top < height; top += sliceHeight) {
+        const partHeight = Math.min(sliceHeight,height-top);
+        let preparedBytes, type = 'image/png';
+        if (height <= sliceHeight && (asset.type === 'image/jpeg' || asset.type === 'image/png' && staticPng(asset.bytes))) {
+          preparedBytes = asset.bytes;
+          type = asset.type;
+        } else {
+          const canvas = new OffscreenCanvas(width, partHeight);
+          try {
+            canvas.getContext('2d').drawImage(bitmap, 0, top, width, partHeight, 0, 0, width, partHeight);
+            const rendered = await canvas.convertToBlob({type:'image/png'});
+            if (renderedBytes + assetBytes + rendered.size > 32 * MiB) limit();
+            preparedBytes = new Uint8Array(await rendered.arrayBuffer());
+          } finally { canvas.width = 0; canvas.height = 0; }
+        }
+        assetBytes += preparedBytes.length;
+        if (renderedBytes + assetBytes > 32 * MiB) limit();
+        const id = 'image' + names.size + '_' + parts.length;
+        entries.push([id,dataUrl(preparedBytes,type)]);
+        parts.push({id,width,height:partHeight});
       }
-      renderedBytes += preparedBytes.length;
-      if (renderedBytes > 32 * MiB) limit();
-      const id = 'image' + names.size;
-      images[id] = dataUrl(preparedBytes, 'image/png');
-      names.set(asset.path, id);
+      renderedBytes += assetBytes;
+      Object.assign(images,Object.fromEntries(entries));
+      names.set(asset.path, parts[0].id);
       dimensions.set(asset.path, {width, height});
+      if (parts.length > 1) slices.set(asset.path,parts);
       if (asset.type === 'image/gif' || asset.type === 'image/webp') staticImages++;
     } catch (error) {
       if (error.code === 'PDF_LIMIT') throw error;
       skipped++;
     } finally { bitmap?.close(); }
   }
-  return {images, names, dimensions, skipped, staticImages};
+  return {images, names, dimensions, slices, skipped, staticImages};
 }
 
 function tableRows(table) {
@@ -146,10 +160,15 @@ export function pdfDefinition(snapshot, prepared = {images:{}, names:new Map()})
         flush();
         const id = prepared.names.get(node.path);
         if (id) {
+          const slices = prepared.slices?.get(node.path);
           const size = prepared.dimensions?.get(node.path);
-          const fit = size ? [Math.min(availableWidth, size.width * .75), Math.min(MAX_IMAGE_HEIGHT, size.height * .75)]
-            : [Math.min(315,availableWidth), 245];
-          out.push({image:id, fit, margin:[0,3,0,3]});
+          if (slices) {
+            for (const part of slices) out.push({image:part.id,width:Math.min(availableWidth,part.width * .75),margin:[0,3,0,3]});
+          } else {
+            const fit = size ? [Math.min(availableWidth, size.width * .75), Math.min(MAX_IMAGE_HEIGHT, size.height * .75)]
+              : [Math.min(315,availableWidth), 245];
+            out.push({image:id, fit, margin:[0,3,0,3]});
+          }
         }
         if (node.alt || !id) out.push(textLine(node.alt || '图片无法排版', {fontSize:9,color:'#596960'}));
         return;
@@ -272,6 +291,10 @@ export function pdfDefinition(snapshot, prepared = {images:{}, names:new Map()})
   const notices = new Map((snapshot.warnings || []).map(({code,label}) => [label || warningLabel(code),
     warningLabel(code) + (label ? ' · ' + label : '')]));
   for (const note of notes) if (!notices.has(note)) notices.set(note,note);
+  if (prepared.slices?.size) {
+    const note = prepared.slices.size + ' 幅长图已按原分辨率连续分段排版';
+    notices.set(note,note);
+  }
   if (notices.size) {
     content.push({text:'保存提示',bold:true,fontSize:12,margin:[0,10,0,5]},
       {ul:[...notices.values()],fontSize:9,color:'#715522'});

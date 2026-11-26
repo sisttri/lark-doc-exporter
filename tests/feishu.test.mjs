@@ -451,6 +451,52 @@ test('table 单元格按顺序输出多行多列，且无表头时全部是 td',
   assertAllowedTags(result.html);
 });
 
+test('table 保留 caption 和 thead/tbody/tfoot，表头内的 td 仍属于 thead', () => {
+  const result = convertCapture(captureOf([{
+    id: 'sectioned-table',
+    type: 'table',
+    html: '<div data-block-type="table"><table>' +
+      '<caption><span style="font-style:italic">合成摘要 &amp; 数量</span><button>隐藏控件</button></caption>' +
+      '<thead><tr><td colspan="2">合成列标题</td></tr></thead>' +
+      '<tbody><tr><td rowspan="2">甲</td><td><span style="text-decoration:line-through">旧值</span></td></tr>' +
+      '<tr><td>乙</td></tr></tbody>' +
+      '<tbody><tr><td>丙</td><td>丁</td></tr></tbody>' +
+      '<tfoot><tr><th>合计</th><td>4</td></tr></tfoot>' +
+      '</table></div>',
+  }]));
+  const table = elements(result.html, 'table')[0];
+  assert.deepEqual(table.childNodes.filter(node => node.tagName).map(node => node.tagName),
+    ['caption', 'thead', 'tbody', 'tbody', 'tfoot']);
+  assert.equal(textOf(elements(table, 'caption')[0]), '合成摘要 & 数量');
+  assert.match(result.html, /<caption><em>合成摘要 &amp; 数量<\/em><\/caption>/u);
+  assert.match(result.html, /<thead><tr><td colspan="2">合成列标题<\/td><\/tr><\/thead>/u);
+  assert.match(result.html, /<td rowspan="2">甲<\/td><td><s>旧值<\/s><\/td>/u);
+  assert.deepEqual(elements(table, 'tr').map(textOf), ['合成列标题', '甲旧值', '乙', '丙丁', '合计4']);
+  assert.deepEqual(result.warnings, []);
+  assertAllowedTags(result.html);
+});
+
+test('table 只转换所属行组的直接行，不将嵌套表格行提升为外层行', () => {
+  const result = convertCapture(captureOf([{
+    id: 'nested-table',
+    type: 'table',
+    html: '<div data-block-type="table"><table>' +
+      '<thead><tr><td>外层表头</td></tr></thead>' +
+      '<tbody><tr><td>外层单元格<table><thead><tr><td>内层表头</td></tr></thead>' +
+      '<tbody><tr><td>内层正文</td></tr></tbody></table></td></tr></tbody>' +
+      '<tfoot><tr><td>外层表尾</td></tr></tfoot>' +
+      '</table></div>',
+  }]));
+  const table = elements(result.html, 'table')[0];
+  assert.deepEqual(table.childNodes.filter(node => node.tagName).map(node => node.tagName),
+    ['thead', 'tbody', 'tfoot']);
+  assert.equal(elements(table, 'tr').length, 3);
+  assert.equal(elements(table, 'thead').length, 1);
+  assert.equal(elements(table, 'tbody').length, 1);
+  assert.equal(textOf(elements(table, 'tbody')[0]), '外层单元格内层表头内层正文');
+  assertAllowedTags(result.html);
+});
+
 // ---------- 图片 ----------
 
 test('image 块按 blockId 关联 capture.images 生成 images/<id>.<ext>', () => {

@@ -253,19 +253,6 @@ function hasVisibleContent(html) {
   return html.replace(/<[^>]*>/gu, '').trim() !== '';
 }
 
-/** 收集表格行；遇到嵌套表格时不再深入，保证行顺序与文档一致。 */
-function collectTableRows(table) {
-  const rows = [];
-  const walk = (node) => {
-    for (const child of childElements(node)) {
-      if (child.tagName === 'tr') rows.push(child);
-      else if (child.tagName !== 'table') walk(child);
-    }
-  };
-  walk(table);
-  return rows;
-}
-
 /** 收集单元格内的块（文档顺序，遇表格嵌套停止）。 */
 function collectCellBlocks(cell, addWarning) {
   const infos = [];
@@ -650,14 +637,24 @@ export function convertCapture(capture) {
       addWarning('unsupported_block', '表格块 ' + info.id + ' 无法解析');
       return null;
     }
-    const rows = [];
-    for (const row of collectTableRows(table)) {
+    function renderRow(row) {
       const cells = childElements(row).filter((cell) => cell.tagName === 'td' || cell.tagName === 'th');
-      if (!cells.length) continue;
-      rows.push('<tr>' + cells.map(renderTableCell).join('') + '</tr>');
+      return cells.length ? '<tr>' + cells.map(renderTableCell).join('') + '</tr>' : '';
     }
-    if (!rows.length) return null;
-    return '<table><tbody>' + rows.join('') + '</tbody></table>';
+    const parts = [];
+    for (const child of childElements(table)) {
+      if (child.tagName === 'caption') {
+        const content = renderLines(child) || renderInline(child.childNodes, false);
+        parts.push('<caption>' + content + '</caption>');
+      } else if (child.tagName === 'tr') {
+        parts.push(renderRow(child));
+      } else if (['thead', 'tbody', 'tfoot'].includes(child.tagName)) {
+        const rows = childElements(child).filter((row) => row.tagName === 'tr').map(renderRow).join('');
+        if (rows) parts.push('<' + child.tagName + '>' + rows + '</' + child.tagName + '>');
+      }
+    }
+    const content = parts.join('');
+    return content ? '<table>' + content + '</table>' : null;
   }
 
   function renderBlock(info) {

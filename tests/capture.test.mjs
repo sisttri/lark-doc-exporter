@@ -24,6 +24,170 @@ function virtualWhiteboard(t, {mounted = () => true, decoys = false} = {}) {
   return {...session,...fixture};
 }
 
+function virtualImage(t, {change = () => {}, bitmapScale = 1, hidden = false, candidates = 1, onBitmap = () => {}} = {}) {
+  const session = virtualDocument(t,{textIds:[],totalHeight:600});
+  const doc = globalThis.document, page = doc.querySelector('.page-block');
+  const originalOne = doc.querySelector, originalAll = doc.querySelectorAll, originalCreate = doc.createElement;
+  const draws = [], bitmaps = [];
+  const block = {
+    parentElement:{closest:() => page},textContent:'',
+    outerHTML:'<div data-block-id="picture" data-block-type="image"><img src="loaded.png"></div>',
+    getAttribute:name => ({'data-block-id':'picture','data-block-type':'image'})[name] ?? null,
+    getBoundingClientRect:() => ({top:120-session.scroller.scrollTop,bottom:152-session.scroller.scrollTop,height:32,width:64}),
+    scrollIntoView() { session.scroller.scrollTop=56; },
+  };
+  function image(source, width = 16) {
+    return {currentSrc:source,complete:true,naturalWidth:width,naturalHeight:8,hidden,
+      parentElement:block,closest:() => block,getAttribute:() => '',
+      getBoundingClientRect:() => ({width:16,height:8})};
+  }
+  let current = image('loaded-low.png');
+  const refresh = () => {change({elapsed:session.elapsed(),get current() {return current;},replace:next => {current=next;},image});return current;};
+  block.querySelector = selector => selector === 'img' ? refresh() : null;
+  block.querySelectorAll = selector => selector === 'img' ? Array.from({length:candidates},() => refresh()) : [];
+  doc.querySelector = selector => selector === '[data-block-id="picture"]' ? block : originalOne(selector);
+  doc.querySelectorAll = selector => selector === '[data-block-id]' ? [page,block] : originalAll(selector);
+  doc.createElement = tag => {
+    if (tag !== 'canvas') return originalCreate(tag);
+    const canvas = {width:0,height:0,getContext:() => ({drawImage(source) {draws.push(source);canvas.source=source;}}),
+      toDataURL:() => 'data:image/png;base64,' + btoa(canvas.source.source || canvas.source.currentSrc)};
+    return canvas;
+  };
+  const previous = Object.getOwnPropertyDescriptor(globalThis,'createImageBitmap');
+  globalThis.createImageBitmap = async source => {
+    const scale = typeof bitmapScale === 'function' ? bitmapScale(session.elapsed()) : bitmapScale;
+    const bitmap = {width:source.naturalWidth*scale,height:source.naturalHeight*scale,
+      source:source.currentSrc,closed:false,close() {this.closed=true;}};
+    bitmaps.push(bitmap); await onBitmap(source); return bitmap;
+  };
+  t.after(() => {if (previous) Object.defineProperty(globalThis,'createImageBitmap',previous);else delete globalThis.createImageBitmap;});
+  return {...session,draws,bitmaps};
+}
+
+test('普通图按已解码位图像素复制，保留高密度资源而非natural尺寸', async t => {
+  const session = virtualImage(t,{bitmapScale:2});
+  const result = await capturePage({onProgress:session.onProgress});
+  assert.equal(result.images[0].width,32);
+  assert.equal(result.images[0].height,16);
+  assert.equal(session.draws[0],session.bitmaps[0]);
+  assert.equal(session.draws.length,1,'稳定图片复核尺寸后复用PNG，避免重复编码');
+  assert.ok(session.bitmaps.every(bitmap => bitmap.closed));
+  assert.deepEqual(result.warnings,[]);
+});
+
+for (const replacement of ['source','node']) {
+  test('普通图等待期间重查' + (replacement === 'source' ? '同节点所选源' : '替换节点') + '后保存稳定图片', async t => {
+    let changed = false;
+    const session = virtualImage(t,{change(state) {
+      if (changed || state.elapsed < 400) return;
+      changed=true;
+      if (replacement === 'source') state.current.currentSrc='loaded-final.png';
+      else state.replace(state.image('loaded-final.png'));
+    }});
+    const result = await capturePage({onProgress:session.onProgress});
+    assert.equal(atob(result.images[0].dataUrl.split(',')[1]),'loaded-final.png');
+    assert.equal(result.images.length,1);
+    assert.deepEqual(result.warnings,[]);
+  });
+}
+
+test('普通图首次成功后同源更高像素到达会替换已保存素材，即使HTML不变', async t => {
+  const session = virtualImage(t,{change(state) {if (state.elapsed >= 1000) state.current.naturalWidth=64;}});
+  const result = await capturePage({onProgress:session.onProgress});
+  assert.equal(result.images.length,1);
+  assert.equal(result.images[0].width,64);
+  assert.deepEqual(result.warnings,[]);
+});
+
+test('普通图末尾复核解码像素尺寸，即使节点、源及natural尺寸均未变化', async t => {
+  const session = virtualImage(t,{bitmapScale:elapsed => elapsed >= 1000 ? 2 : 1});
+  const result = await capturePage({onProgress:session.onProgress});
+  assert.equal(result.images.length,1);
+  assert.equal(result.images[0].width,32);
+  assert.ok(session.bitmaps.every(bitmap => bitmap.closed));
+  assert.deepEqual(result.warnings,[]);
+});
+
+for (const replacement of ['source','node']) {
+  test('普通图首次成功后' + (replacement === 'source' ? '同节点源切换' : '节点替换') + '会更新已有素材', async t => {
+    let changed = false;
+    const session = virtualImage(t,{change(state) {
+      if (changed || state.elapsed < 1000) return;
+      changed=true;
+      if (replacement === 'source') state.current.currentSrc='loaded-later.png';
+      else state.replace(state.image('loaded-later.png'));
+    }});
+    const result = await capturePage({onProgress:session.onProgress});
+    assert.equal(result.images.length,1);
+    assert.equal(atob(result.images[0].dataUrl.split(',')[1]),'loaded-later.png');
+    assert.deepEqual(result.warnings,[]);
+  });
+}
+
+test('普通图只有隐藏img时明确提示未能读取，不保存隐藏素材', async t => {
+  const session = virtualImage(t,{hidden:true});
+  const result = await capturePage({onProgress:session.onProgress});
+  assert.deepEqual(result.images,[]);
+  assert.ok(result.warnings.some(warning => warning.code === 'image_unreadable'));
+});
+
+for (const candidates of [0,2]) {
+  test('普通图' + (candidates ? '存在多个可见候选' : '没有img') + '时明确提示无法确认素材', async t => {
+    const session = virtualImage(t,{candidates});
+    const result = await capturePage({onProgress:session.onProgress});
+    assert.deepEqual(result.images,[]);
+    assert.ok(result.warnings.some(warning => warning.code === 'image_unreadable'));
+  });
+}
+
+test('普通图等待期间取消会停止且恢复阅读位置', async t => {
+  const session = virtualImage(t);
+  await assert.rejects(capturePage({onProgress:session.onProgress,shouldStop:() => session.elapsed() >= 400}),{name:'AbortError'});
+  assert.equal(session.scroller.scrollTop,session.originalTop);
+  assert.equal(session.draws.length,0);
+});
+
+test('普通图按解码后像素检查尺寸上限，超限不创建输出且释放位图', async t => {
+  const session = virtualImage(t,{bitmapScale:1024});
+  const result = await capturePage({onProgress:session.onProgress});
+  assert.deepEqual(result.images,[]);
+  assert.equal(session.draws.length,0);
+  assert.ok(session.bitmaps.every(bitmap => bitmap.closed));
+  assert.ok(result.warnings.some(warning => warning.code === 'image_unreadable' && warning.label.includes('尺寸')));
+});
+
+test('普通图无ImageBitmap接口时仍能从已加载img复制PNG', async t => {
+  const session = virtualImage(t);
+  delete globalThis.createImageBitmap;
+  const result = await capturePage({onProgress:session.onProgress});
+  assert.equal(result.images[0].width,16);
+  assert.equal(atob(result.images[0].dataUrl.split(',')[1]),'loaded-low.png');
+  assert.deepEqual(result.warnings,[]);
+});
+
+test('普通图异步创建位图期间换源会丢弃旧位图并重新稳定采集', async t => {
+  let changed = false;
+  const session = virtualImage(t,{onBitmap(source) {
+    if (changed) return;
+    changed=true; source.currentSrc='loaded-during-decode.png';
+  }});
+  const result = await capturePage({onProgress:session.onProgress});
+  assert.equal(result.images.length,1);
+  assert.equal(atob(result.images[0].dataUrl.split(',')[1]),'loaded-during-decode.png');
+  assert.equal(session.draws.length,1);
+  assert.ok(session.bitmaps.every(bitmap => bitmap.closed));
+  assert.deepEqual(result.warnings,[]);
+});
+
+test('普通图位图创建期间取消也会释放位图而不交付素材', async t => {
+  let cancelled = false;
+  const session = virtualImage(t,{onBitmap() {cancelled=true;}});
+  await assert.rejects(capturePage({onProgress:session.onProgress,shouldStop:() => cancelled}),{name:'AbortError'});
+  assert.equal(session.draws.length,0);
+  assert.ok(session.bitmaps.every(bitmap => bitmap.closed));
+  assert.equal(session.scroller.scrollTop,session.originalTop);
+});
+
 test('白板内容canvas保存为PNG，排除辅助层、缩略图和隐藏或工具画布', async t => {
   const session = virtualWhiteboard(t,{decoys:true});
   const result = await capturePage({onProgress:session.onProgress});
@@ -793,9 +957,11 @@ for (const mountsDuringImage of [false, true]) {
     const img = {
       get complete() { return session.elapsedAtPosition() >= delay; },
       get naturalWidth() { return this.complete ? 1 : 0; }, naturalHeight:1,
-      getAttribute:() => '',
+      getAttribute:() => '',closest:() => image,parentElement:image,
+      getBoundingClientRect:() => ({width:1,height:1}),
     };
     image.querySelector = selector => selector === 'img' ? img : null;
+    image.querySelectorAll = selector => selector === 'img' ? [img] : [];
     doc.createElement = tag => tag === 'canvas' ? {
       getContext:() => ({drawImage() {}}), toDataURL:() => 'data:image/png;base64,AA==',
     } : originalCreate(tag);

@@ -783,7 +783,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
               (node.children || []).forEach(visit);
             }
             snapshot.blocks.forEach(visit);
-            const images = {}, names = /* @__PURE__ */ new Map(), dimensions = /* @__PURE__ */ new Map();
+            const images = {}, names = /* @__PURE__ */ new Map(), dimensions = /* @__PURE__ */ new Map(), slices = /* @__PURE__ */ new Map();
             let pixels = 0, bytes = 0, renderedBytes = 0, skipped = 0, staticImages = 0;
             for (const asset of snapshot.assets) {
               if (asset.role !== "image" || !referenced.has(asset.path)) continue;
@@ -794,23 +794,40 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
                 bitmap = await createImageBitmap(new Blob([asset.bytes], { type: asset.type }));
                 pixels += bitmap.width * bitmap.height;
                 if (pixels > 28e6) limit();
-                const scale = Math.min(1, 1600 / Math.max(bitmap.width, bitmap.height));
-                const width = Math.max(1, Math.round(bitmap.width * scale)), height = Math.max(1, Math.round(bitmap.height * scale));
-                let preparedBytes;
-                if (asset.type === "image/png" && scale === 1 && staticPng(asset.bytes)) {
-                  preparedBytes = asset.bytes;
-                } else {
-                  const canvas = new OffscreenCanvas(width, height);
-                  canvas.getContext("2d").drawImage(bitmap, 0, 0, width, height);
-                  const rendered = await canvas.convertToBlob({ type: "image/png" });
-                  preparedBytes = new Uint8Array(await rendered.arrayBuffer());
+                const { width, height } = bitmap;
+                const displayWidth = Math.min(PAGE_WIDTH, width * 0.75);
+                const sliceHeight = Math.max(1, Math.floor(MAX_IMAGE_HEIGHT * width / displayWidth));
+                const entries = [], parts = [];
+                let assetBytes = 0;
+                for (let top = 0; top < height; top += sliceHeight) {
+                  const partHeight = Math.min(sliceHeight, height - top);
+                  let preparedBytes, type = "image/png";
+                  if (height <= sliceHeight && (asset.type === "image/jpeg" || asset.type === "image/png" && staticPng(asset.bytes))) {
+                    preparedBytes = asset.bytes;
+                    type = asset.type;
+                  } else {
+                    const canvas = new OffscreenCanvas(width, partHeight);
+                    try {
+                      canvas.getContext("2d").drawImage(bitmap, 0, top, width, partHeight, 0, 0, width, partHeight);
+                      const rendered = await canvas.convertToBlob({ type: "image/png" });
+                      if (renderedBytes + assetBytes + rendered.size > 32 * MiB2) limit();
+                      preparedBytes = new Uint8Array(await rendered.arrayBuffer());
+                    } finally {
+                      canvas.width = 0;
+                      canvas.height = 0;
+                    }
+                  }
+                  assetBytes += preparedBytes.length;
+                  if (renderedBytes + assetBytes > 32 * MiB2) limit();
+                  const id = "image" + names.size + "_" + parts.length;
+                  entries.push([id, dataUrl2(preparedBytes, type)]);
+                  parts.push({ id, width, height: partHeight });
                 }
-                renderedBytes += preparedBytes.length;
-                if (renderedBytes > 32 * MiB2) limit();
-                const id = "image" + names.size;
-                images[id] = dataUrl2(preparedBytes, "image/png");
-                names.set(asset.path, id);
+                renderedBytes += assetBytes;
+                Object.assign(images, Object.fromEntries(entries));
+                names.set(asset.path, parts[0].id);
                 dimensions.set(asset.path, { width, height });
+                if (parts.length > 1) slices.set(asset.path, parts);
                 if (asset.type === "image/gif" || asset.type === "image/webp") staticImages++;
               } catch (error) {
                 if (error.code === "PDF_LIMIT") throw error;
@@ -819,7 +836,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
                 bitmap?.close();
               }
             }
-            return { images, names, dimensions, skipped, staticImages };
+            return { images, names, dimensions, slices, skipped, staticImages };
           }
           function tableRows(table) {
             const rows = [];
@@ -890,9 +907,14 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
                   flush();
                   const id = prepared.names.get(node.path);
                   if (id) {
+                    const slices = prepared.slices?.get(node.path);
                     const size = prepared.dimensions?.get(node.path);
-                    const fit = size ? [Math.min(availableWidth, size.width * 0.75), Math.min(MAX_IMAGE_HEIGHT, size.height * 0.75)] : [Math.min(315, availableWidth), 245];
-                    out.push({ image: id, fit, margin: [0, 3, 0, 3] });
+                    if (slices) {
+                      for (const part of slices) out.push({ image: part.id, width: Math.min(availableWidth, part.width * 0.75), margin: [0, 3, 0, 3] });
+                    } else {
+                      const fit = size ? [Math.min(availableWidth, size.width * 0.75), Math.min(MAX_IMAGE_HEIGHT, size.height * 0.75)] : [Math.min(315, availableWidth), 245];
+                      out.push({ image: id, fit, margin: [0, 3, 0, 3] });
+                    }
                   }
                   if (node.alt || !id) out.push(textLine(node.alt || "图片无法排版", { fontSize: 9, color: "#596960" }));
                   return;
@@ -1037,6 +1059,10 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
               warningLabel2(code) + (label ? " · " + label : "")
             ]));
             for (const note of notes) if (!notices.has(note)) notices.set(note, note);
+            if (prepared.slices?.size) {
+              const note = prepared.slices.size + " 幅长图已按原分辨率连续分段排版";
+              notices.set(note, note);
+            }
             if (notices.size) {
               content.push(
                 { text: "保存提示", bold: true, fontSize: 12, margin: [0, 10, 0, 5] },
@@ -9822,17 +9848,6 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
   function hasVisibleContent(html) {
     return html.replace(/<[^>]*>/gu, "").trim() !== "";
   }
-  function collectTableRows(table) {
-    const rows = [];
-    const walk = (node) => {
-      for (const child of childElements(node)) {
-        if (child.tagName === "tr") rows.push(child);
-        else if (child.tagName !== "table") walk(child);
-      }
-    };
-    walk(table);
-    return rows;
-  }
   function collectCellBlocks(cell, addWarning) {
     const infos = [];
     const walk = (node) => {
@@ -10181,14 +10196,24 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
         addWarning("unsupported_block", "表格块 " + info.id + " 无法解析");
         return null;
       }
-      const rows = [];
-      for (const row of collectTableRows(table)) {
+      function renderRow(row) {
         const cells = childElements(row).filter((cell) => cell.tagName === "td" || cell.tagName === "th");
-        if (!cells.length) continue;
-        rows.push("<tr>" + cells.map(renderTableCell).join("") + "</tr>");
+        return cells.length ? "<tr>" + cells.map(renderTableCell).join("") + "</tr>" : "";
       }
-      if (!rows.length) return null;
-      return "<table><tbody>" + rows.join("") + "</tbody></table>";
+      const parts = [];
+      for (const child of childElements(table)) {
+        if (child.tagName === "caption") {
+          const content2 = renderLines(child) || renderInline(child.childNodes, false);
+          parts.push("<caption>" + content2 + "</caption>");
+        } else if (child.tagName === "tr") {
+          parts.push(renderRow(child));
+        } else if (["thead", "tbody", "tfoot"].includes(child.tagName)) {
+          const rows = childElements(child).filter((row) => row.tagName === "tr").map(renderRow).join("");
+          if (rows) parts.push("<" + child.tagName + ">" + rows + "</" + child.tagName + ">");
+        }
+      }
+      const content = parts.join("");
+      return content ? "<table>" + content + "</table>" : null;
     }
     function renderBlock(info) {
       const heading = HEADING_TYPE.exec(info.type);
@@ -11864,22 +11889,28 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
 
   // src/userscript/whiteboard.js
   var CONTENT_CANVAS = ".whiteboad-x-content-canvas canvas.whiteboad-x-normal-canvas";
+  var BLOCK_VIEW = ".whiteboard-view-container.is-block";
+  var STABLE_MS = 240;
   function styleOf(node) {
     return node.ownerDocument?.defaultView?.getComputedStyle(node) || {};
+  }
+  function isVisibleInBlock(node, block) {
+    if (node.isConnected === false || node.closest("[data-block-type]") !== block) return false;
+    for (let current = node; current; current = current.parentElement) {
+      const style = styleOf(current);
+      const role = current.getAttribute("role");
+      if (current.hidden || current.getAttribute("aria-hidden") === "true" || ["BUTTON", "INPUT", "SELECT"].includes(current.tagName) || ["button", "toolbar", "menu", "menuitem"].includes(role) || /(?:^|[-_\s])(?:mini[-_]?map|toolbar|auxiliary)(?:$|[-_\s])/iu.test(String(current.className || "")) || style.display === "none" || ["hidden", "collapse"].includes(style.visibility) || style.opacity === "0") return false;
+      if (current === block) return true;
+    }
+    return false;
   }
   function findWhiteboardCanvas(block) {
     if (!block) return null;
     const candidates = [...block.querySelectorAll(CONTENT_CANVAS)].filter((canvas) => {
-      if (canvas.isConnected === false || canvas.closest("[data-block-type]") !== block) return false;
+      if (!isVisibleInBlock(canvas, block)) return false;
       const stage = canvas.closest(".whiteboad-x-canvas-container");
       const box = canvas.getBoundingClientRect();
       if (!stage || !block.contains(stage) || !canvas.width || !canvas.height || !box.width || !box.height) return false;
-      for (let node = canvas; node; node = node.parentElement) {
-        const style = styleOf(node);
-        const role = node.getAttribute("role");
-        if (node.hidden || node.getAttribute("aria-hidden") === "true" || ["BUTTON", "INPUT", "SELECT"].includes(node.tagName) || ["button", "toolbar", "menu", "menuitem"].includes(role) || /(?:^|[-_\s])(?:mini[-_]?map|toolbar|auxiliary)(?:$|[-_\s])/iu.test(String(node.className || "")) || style.display === "none" || ["hidden", "collapse"].includes(style.visibility) || style.opacity === "0") return false;
-        if (node === block) break;
-      }
       return true;
     });
     return candidates.length === 1 ? candidates[0] : null;
@@ -11894,15 +11925,25 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
     }
     return "#ffffff";
   }
-  function hasDrawnPixels(canvas) {
+  function readPixels(canvas, block, fingerprint = true) {
     const context = canvas.getContext("2d");
     if (!context) throw new Error("白板内容画布无法读取");
+    const background = /^rgba?\(([^)]+)\)$/iu.exec(backgroundOf(canvas, block));
+    const rgb = background ? background[1].trim().split(/[\s,/]+/u).slice(0, 3).map(Number) : [255, 255, 255];
+    let drawn = false, hash = 2166136261;
     const rows = Math.max(1, Math.floor(65536 / canvas.width));
     for (let top = 0; top < canvas.height; top += rows) {
       const pixels = context.getImageData(0, top, canvas.width, Math.min(rows, canvas.height - top)).data;
-      for (let index = 3; index < pixels.length; index += 4) if (pixels[index]) return true;
+      for (let index = 0; index < pixels.length; index += 4) {
+        const red = pixels[index], green = pixels[index + 1], blue = pixels[index + 2], alpha = pixels[index + 3];
+        if (alpha && (red !== rgb[0] || green !== rgb[1] || blue !== rgb[2])) {
+          drawn = true;
+          if (!fingerprint) return { drawn };
+        }
+        if (fingerprint) hash = Math.imul(hash ^ (red << 24 | green << 16 | blue << 8 | alpha), 16777619) >>> 0;
+      }
     }
-    return false;
+    return { drawn, hash };
   }
   function withinImageLimits(canvas) {
     return canvas.width <= 8192 && canvas.height <= 8192 && canvas.width * canvas.height <= 16e6;
@@ -11911,52 +11952,215 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
     const canvas = findWhiteboardCanvas(block);
     if (!canvas || !withinImageLimits(canvas)) return false;
     try {
-      return hasDrawnPixels(canvas);
+      return readPixels(canvas, block, false).drawn;
     } catch {
       return false;
     }
   }
-  async function captureWhiteboardPreview(id, { document: document2 = globalThis.document, wait: wait2, checkStop } = {}) {
+  async function waitForStableCanvas(id, document2, wait2, checkStop, { view, width = 0, height = 0 } = {}) {
     const started = Date.now();
-    let previous, size = "", stableSince = started, empty = false;
+    let previous, signature = "", stableSince = started;
     while (Date.now() - started <= 2500) {
       checkStop();
       const block = document2.querySelector('[data-block-id="' + id + '"]');
       const source = findWhiteboardCanvas(block);
-      if (source) {
-        const { width, height } = source;
-        if (!withinImageLimits(source)) throw new Error("白板预览尺寸超过图片限制");
-        const nextSize = width + ":" + height;
-        if (source !== previous || nextSize !== size) {
+      if (source && (!view || view.isConnected !== false && block.contains(view) && view.contains(source))) {
+        if (!withinImageLimits(source)) {
+          if (view) return null;
+          throw new Error("白板预览尺寸超过图片限制");
+        }
+        if (source.width < width || source.height < height) {
+          previous = null;
+          signature = "";
+          await wait2(120);
+          continue;
+        }
+        const pixels = readPixels(source, block);
+        const next = source.width + ":" + source.height + ":" + pixels.hash;
+        if (!pixels.drawn || source !== previous || next !== signature) {
           previous = source;
-          size = nextSize;
+          signature = next;
           stableSince = Date.now();
         }
-        if (Date.now() - stableSince >= 120) {
-          empty = !hasDrawnPixels(source);
-          if (!empty) {
-            checkStop();
-            const canvas = document2.createElement("canvas");
-            canvas.width = width;
-            canvas.height = height;
-            const context = canvas.getContext("2d");
-            if (!context) throw new Error("白板预览画布无法创建");
-            context.fillStyle = backgroundOf(source, block);
-            context.fillRect(0, 0, width, height);
-            context.drawImage(source, 0, 0);
-            const dataUrl2 = canvas.toDataURL("image/png");
-            if (!/^data:image\/png;base64,[A-Za-z0-9+/]+={0,2}$/u.test(dataUrl2)) throw new Error("白板预览未生成有效PNG");
-            return { blockId: id, mime: "image/png", width, height, alt: "白板静态预览（当前画面）", dataUrl: dataUrl2 };
-          }
-        }
+        if (pixels.drawn && Date.now() - stableSince >= STABLE_MS) return { source, block };
       } else {
         previous = null;
-        size = "";
+        signature = "";
+      }
+      await wait2(120);
+    }
+    checkStop();
+    return null;
+  }
+  function redrawPlan(block, source) {
+    const views = [...block.querySelectorAll(BLOCK_VIEW)].filter((view2) => isVisibleInBlock(view2, block));
+    if (views.length !== 1 || !views[0].contains(source)) return null;
+    const view = views[0], box = view.getBoundingClientRect(), canvasBox = source.getBoundingClientRect();
+    if (![box.width, box.height, canvasBox.width, canvasBox.height].every((value) => Number.isFinite(value) && value > 0)) return null;
+    const density = Math.min(source.width / canvasBox.width, source.height / canvasBox.height);
+    if (density >= 2) return null;
+    let scale = Math.min(
+      2,
+      2 / density,
+      8192 / source.width,
+      8192 / source.height,
+      Math.sqrt(16e6 / (source.width * source.height))
+    );
+    if (!withinImageLimits({ width: Math.ceil(source.width * scale), height: Math.ceil(source.height * scale) })) {
+      scale = Math.max(1, scale - 1 / Math.min(source.width, source.height));
+    }
+    return {
+      view,
+      scale,
+      cssWidth: box.width * scale,
+      cssHeight: box.height * scale,
+      width: Math.floor(source.width * scale),
+      height: Math.floor(source.height * scale),
+      originalWidth: source.width,
+      originalHeight: source.height,
+      limited: density * scale < 2
+    };
+  }
+  async function restoreView(plan, style, id, document2, wait2) {
+    if (style === null) plan.view.removeAttribute("style");
+    else plan.view.setAttribute("style", style);
+    const started = Date.now();
+    while (Date.now() - started <= 900 && plan.view.isConnected !== false) {
+      const block = document2.querySelector('[data-block-id="' + id + '"]');
+      const source = findWhiteboardCanvas(block);
+      if (!block?.contains(plan.view) || source && plan.view.contains(source) && source.width === plan.originalWidth && source.height === plan.originalHeight) return;
+      try {
+        await wait2(60);
+      } catch {
+        return;
+      }
+    }
+  }
+  function copyPreview(id, { source, block }, document2, checkStop, limited) {
+    checkStop();
+    const { width, height } = source;
+    const canvas = document2.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+    const context = canvas.getContext("2d");
+    if (!context) throw new Error("白板预览画布无法创建");
+    context.fillStyle = backgroundOf(source, block);
+    context.fillRect(0, 0, width, height);
+    context.drawImage(source, 0, 0);
+    const dataUrl2 = canvas.toDataURL("image/png");
+    if (!/^data:image\/png;base64,[A-Za-z0-9+/]+={0,2}$/u.test(dataUrl2)) throw new Error("白板预览未生成有效PNG");
+    return {
+      blockId: id,
+      mime: "image/png",
+      width,
+      height,
+      alt: limited ? "白板静态预览（当前画面，清晰度受页面限制）" : "白板静态预览（当前画面）",
+      dataUrl: dataUrl2
+    };
+  }
+  async function captureWhiteboardPreview(id, { document: document2 = globalThis.document, wait: wait2, checkStop } = {}) {
+    checkStop();
+    let block = document2.querySelector('[data-block-id="' + id + '"]');
+    let source = findWhiteboardCanvas(block);
+    if (!source) {
+      const initial = await waitForStableCanvas(id, document2, wait2, checkStop);
+      if (!initial) throw new Error("白板内容画面尚未绘制，或未确认唯一且可见的内容画布");
+      ({ block, source } = initial);
+    }
+    if (source && !withinImageLimits(source)) throw new Error("白板预览尺寸超过图片限制");
+    const plan = source && redrawPlan(block, source);
+    const limited = Boolean(plan);
+    if (plan && plan.scale > 1) {
+      const style = plan.view.getAttribute("style");
+      let image;
+      try {
+        plan.view.style.setProperty("width", plan.cssWidth + "px", "important");
+        plan.view.style.setProperty("height", plan.cssHeight + "px", "important");
+        plan.view.style.setProperty("max-width", "none", "important");
+        const highResolution = await waitForStableCanvas(id, document2, wait2, checkStop, plan);
+        if (highResolution) image = copyPreview(id, highResolution, document2, checkStop, plan.limited);
+      } finally {
+        await restoreView(plan, style, id, document2, wait2);
+      }
+      checkStop();
+      if (image) return image;
+    }
+    const preview = await waitForStableCanvas(id, document2, wait2, checkStop);
+    if (!preview) throw new Error("白板内容画面尚未绘制，或未确认唯一且可见的内容画布");
+    return copyPreview(id, preview, document2, checkStop, limited);
+  }
+
+  // src/userscript/image.js
+  function visibleImage(node, block) {
+    if (node.isConnected === false || node.closest("[data-block-id]") !== block) return false;
+    const box = node.getBoundingClientRect();
+    if (!box.width || !box.height) return false;
+    for (let current = node; current; current = current.parentElement) {
+      const style = current.ownerDocument?.defaultView?.getComputedStyle(current) || {};
+      if (current.hidden || current.getAttribute("aria-hidden") === "true" || style.display === "none" || ["hidden", "collapse"].includes(style.visibility) || style.opacity === "0") return false;
+      if (current === block) break;
+    }
+    return true;
+  }
+  function readImageState(block) {
+    if (!block) return null;
+    const candidates = [...block.querySelectorAll("img")].filter((node2) => visibleImage(node2, block));
+    if (candidates.length !== 1) return null;
+    const node = candidates[0];
+    return {
+      node,
+      source: node.currentSrc || node.getAttribute("src") || "",
+      width: node.naturalWidth,
+      height: node.naturalHeight,
+      complete: node.complete
+    };
+  }
+  function sameImageState(a, b) {
+    return a === b || Boolean(a && b && a.node === b.node && a.source === b.source && a.width === b.width && a.height === b.height && a.complete === b.complete);
+  }
+  function checkDimensions(width, height) {
+    if (!Number.isSafeInteger(width) || !Number.isSafeInteger(height) || width < 1 || height < 1 || width > 8192 || height > 8192 || width * height > 16e6) throw new Error("图片位图尺寸超过限制或无效");
+  }
+  async function captureLoadedImage(id, { document: document2 = globalThis.document, wait: wait2, checkStop, saved } = {}) {
+    const started = Date.now();
+    let previous = null, stableSince = started;
+    const current = () => readImageState(document2.querySelector('[data-block-id="' + id + '"]'));
+    while (Date.now() - started <= 2500) {
+      checkStop();
+      const state = current();
+      if (!sameImageState(state, previous)) {
+        previous = state;
+        stableSince = Date.now();
+      }
+      if (state?.complete && state.width && state.height && Date.now() - stableSince >= 120) {
+        checkDimensions(state.width, state.height);
+        let bitmap;
+        try {
+          if (typeof globalThis.createImageBitmap === "function") bitmap = await globalThis.createImageBitmap(state.node);
+          checkStop();
+          if (!sameImageState(state, current())) continue;
+          const width = bitmap?.width ?? state.width, height = bitmap?.height ?? state.height;
+          checkDimensions(width, height);
+          if (saved && sameImageState(saved.state, state) && saved.image.width === width && saved.image.height === height)
+            return { state, image: saved.image };
+          const canvas = document2.createElement("canvas");
+          canvas.width = width;
+          canvas.height = height;
+          const context = canvas.getContext("2d");
+          if (!context) throw new Error("图片画布无法创建");
+          context.drawImage(bitmap || state.node, 0, 0, width, height);
+          const dataUrl2 = canvas.toDataURL("image/png");
+          if (!/^data:image\/png;base64,[A-Za-z0-9+/]+={0,2}$/u.test(dataUrl2)) throw new Error("图片未生成有效PNG");
+          if (!sameImageState(state, current())) continue;
+          return { state, image: { blockId: id, alt: state.node.getAttribute("alt") || "", mime: "image/png", width, height, dataUrl: dataUrl2 } };
+        } finally {
+          bitmap?.close();
+        }
       }
       await wait2(60);
     }
     checkStop();
-    throw new Error(empty ? "白板内容画面尚未绘制，预览未确认" : "未读到唯一且可见的白板内容画布");
+    throw new Error("未读到唯一、可见且加载稳定的图片");
   }
 
   // src/userscript/capture.js
@@ -12224,10 +12428,15 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
         block.html = serialize(fragment);
       }, sampleBlock = function(el) {
         const id = el.getAttribute("data-block-id");
+        const type = el.getAttribute("data-block-type") || "";
+        if (type === "image") {
+          const state = readImageState(el);
+          if (!observedImages.has(id) || !sameImageState(observedImages.get(id), state)) pendingImages.add(id);
+          observedImages.set(id, state);
+        }
         const stored = blocks.get(id), html = el.outerHTML;
         if (stored?.observedHtml === html) return null;
         if (stored) stored.observedHtml = html;
-        const type = el.getAttribute("data-block-type") || "";
         const score = scoreOf(el);
         const semantic = !CONTAINER_TYPES.has(type) ? semanticContent(html) : null;
         const parent = el.parentElement?.closest("[data-block-id]");
@@ -12381,31 +12590,19 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
             return false;
           }
         }
-        const el = document.querySelector('[data-block-id="' + id + '"]');
-        const img = el ? el.querySelector("img") : null;
-        if (!img) return false;
-        const started2 = Date.now();
-        while ((!img.complete || !img.naturalWidth) && Date.now() - started2 < 2500) {
-          await wait(60);
-          checkStop();
-        }
-        if (!img.naturalWidth || !img.naturalHeight) return false;
         try {
-          const canvas = document.createElement("canvas");
-          canvas.width = img.naturalWidth;
-          canvas.height = img.naturalHeight;
-          canvas.getContext("2d").drawImage(img, 0, 0);
-          images.push({
-            blockId: id,
-            alt: img.getAttribute("alt") || "",
-            mime: "image/png",
-            width: img.naturalWidth,
-            height: img.naturalHeight,
-            dataUrl: canvas.toDataURL("image/png")
-          });
+          const index = images.findIndex((image2) => image2.blockId === id);
+          const saved = index < 0 ? void 0 : { image: images[index], state: imageStates.get(id) };
+          const { image, state } = await captureLoadedImage(id, { wait, checkStop, saved });
+          if (index < 0) images.push(image);
+          else images[index] = image;
+          imageStates.set(id, state);
+          observedImages.set(id, state);
+          imageErrors.delete(id);
           return true;
         } catch (error) {
-          warnings2.push({ code: "image_unreadable", label: "图片块 " + id + "：" + String(error && error.message ? error.message : error).slice(0, 120) });
+          if (error.name === "AbortError") throw error;
+          imageErrors.set(id, String(error.message || error).slice(0, 120));
           return false;
         }
       }
@@ -12415,6 +12612,19 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
       const images = [];
       const failedImages = /* @__PURE__ */ new Set();
       const whiteboardErrors = /* @__PURE__ */ new Map();
+      const imageStates = /* @__PURE__ */ new Map(), observedImages = /* @__PURE__ */ new Map(), pendingImages = /* @__PURE__ */ new Set(), imageErrors = /* @__PURE__ */ new Map();
+      async function collectImages(snap) {
+        for (const block of snap.fresh) {
+          if (block.type === "whiteboard" && !images.some((image) => image.blockId === block.id)) {
+            if (!await captureImage(block.id)) failedImages.add(block.id);
+          }
+        }
+        for (const id of [...pendingImages]) {
+          pendingImages.delete(id);
+          if (await captureImage(id)) failedImages.delete(id);
+          else failedImages.add(id);
+        }
+      }
       let noProgress = 0;
       let steps = 0;
       for (; steps < maxSteps; steps++) {
@@ -12423,11 +12633,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
         let added = snap.addedLines;
         mergeSamples(snap);
         added += snap.fresh.length;
-        for (const block of snap.fresh) {
-          if (["image", "whiteboard"].includes(block.type) && !images.some((image) => image.blockId === block.id)) {
-            if (!await captureImage(block.id)) failedImages.add(block.id);
-          }
-        }
+        await collectImages(snap);
         const percent = Math.max(0, Math.min(95, Math.round(
           snap.scrollTop / Math.max(1, snap.sh - snap.ch) * 95
         )));
@@ -12491,11 +12697,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
         checkStop();
         const snap = collectStep(scroller, 0, sampleCode, sampleTable, sampleBlock);
         mergeSamples(snap);
-        for (const block of snap.fresh) {
-          if (["image", "whiteboard"].includes(block.type) && !images.some((image) => image.blockId === block.id)) {
-            if (!await captureImage(block.id)) failedImages.add(block.id);
-          }
-        }
+        await collectImages(snap);
       }
       const hasBlock = (id) => blocks.has(String(id));
       async function sampleMissingBlock(id) {
@@ -12702,11 +12904,15 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
         }
         writeTable(block, saved);
       }
-      for (const id of [...failedImages]) {
+      for (const id of /* @__PURE__ */ new Set([...failedImages, ...imageStates.keys()])) {
         checkStop();
-        if (!await revealBlock(id, positions.get(id))) continue;
+        if (!await revealBlock(id, positions.get(id))) {
+          if (blocks.get(id)?.type === "image") imageErrors.set(id, "未能定位图片以复核已加载位图");
+          continue;
+        }
         if (await captureImage(id)) failedImages.delete(id);
       }
+      for (const [id, reason] of imageErrors) warnings2.push({ code: "image_unreadable", label: "图片块 " + id + "：" + reason });
       for (const [id, reason] of whiteboardErrors) {
         warnings2.push({ code: "image_unreadable", label: "白板块 " + id + "：" + reason });
       }

@@ -4,6 +4,7 @@
 import { parseFragment, serialize } from "parse5";
 import { readDocumentSource } from './source.js';
 import { captureWhiteboardPreview, findWhiteboardCanvas, isWhiteboardReady } from './whiteboard.js';
+import { captureLoadedImage, readImageState, sameImageState } from './image.js';
 export { readDocumentSource } from './source.js';
 
 const ZERO_WIDTH = /[\u200b\u200c\u200d\u2060\ufeff]/gu;
@@ -304,7 +305,7 @@ export async function capturePage({ stepRatio = 0.6, dwellMs, maxSteps = 400, on
       block.html = serialize(fragment);
     }
 
-    // 图片：块首次出现时从页面已加载位图复制（canvas），不额外请求资源。
+    // 图片只复制页面已加载位图；源或像素尺寸变化后重新核对，不额外请求资源。
     async function captureImage(id) {
       if (blocks.get(id)?.type === 'whiteboard') {
         try {
@@ -317,31 +318,16 @@ export async function capturePage({ stepRatio = 0.6, dwellMs, maxSteps = 400, on
           return false;
         }
       }
-      const el = document.querySelector('[data-block-id="' + id + '"]');
-      const img = el ? el.querySelector("img") : null;
-      if (!img) return false;
-      const started = Date.now();
-      while ((!img.complete || !img.naturalWidth) && Date.now() - started < 2500) {
-        await wait(60);
-        checkStop();
-      }
-      if (!img.naturalWidth || !img.naturalHeight) return false;
       try {
-        const canvas = document.createElement("canvas");
-        canvas.width = img.naturalWidth;
-        canvas.height = img.naturalHeight;
-        canvas.getContext("2d").drawImage(img, 0, 0);
-        images.push({
-          blockId: id,
-          alt: img.getAttribute("alt") || "",
-          mime: "image/png",
-          width: img.naturalWidth,
-          height: img.naturalHeight,
-          dataUrl: canvas.toDataURL("image/png"),
-        });
+        const index = images.findIndex(image => image.blockId === id);
+        const saved = index < 0 ? undefined : {image:images[index],state:imageStates.get(id)};
+        const {image,state} = await captureLoadedImage(id,{wait,checkStop,saved});
+        if (index < 0) images.push(image); else images[index]=image;
+        imageStates.set(id,state); observedImages.set(id,state); imageErrors.delete(id);
         return true;
       } catch (error) {
-        warnings.push({ code: "image_unreadable", label: "图片块 " + id + "：" + String(error && error.message ? error.message : error).slice(0, 120) });
+        if (error.name === 'AbortError') throw error;
+        imageErrors.set(id,String(error.message || error).slice(0,120));
         return false;
       }
     }
@@ -352,12 +338,18 @@ export async function capturePage({ stepRatio = 0.6, dwellMs, maxSteps = 400, on
     const images = [];
     const failedImages = new Set();
     const whiteboardErrors = new Map();
+    const imageStates = new Map(), observedImages = new Map(), pendingImages = new Set(), imageErrors = new Map();
     function sampleBlock(el) {
       const id = el.getAttribute('data-block-id');
+      const type = el.getAttribute('data-block-type') || '';
+      if (type === 'image') {
+        const state = readImageState(el);
+        if (!observedImages.has(id) || !sameImageState(observedImages.get(id),state)) pendingImages.add(id);
+        observedImages.set(id,state);
+      }
       const stored = blocks.get(id), html = el.outerHTML;
       if (stored?.observedHtml === html) return null;
       if (stored) stored.observedHtml = html;
-      const type = el.getAttribute('data-block-type') || '';
       const score = scoreOf(el);
       const semantic = !CONTAINER_TYPES.has(type) ? semanticContent(html) : null;
       const parent = el.parentElement?.closest('[data-block-id]');
@@ -376,6 +368,17 @@ export async function capturePage({ stepRatio = 0.6, dwellMs, maxSteps = 400, on
       for (const entry of snap.positions) positions.set(entry[0],entry[1]);
       for (const block of snap.fresh) blocks.set(block.id,block);
       for (const block of snap.improved) Object.assign(blocks.get(block.id),block);
+    }
+    async function collectImages(snap) {
+      for (const block of snap.fresh) {
+        if (block.type === 'whiteboard' && !images.some(image => image.blockId === block.id)) {
+          if (!await captureImage(block.id)) failedImages.add(block.id);
+        }
+      }
+      for (const id of [...pendingImages]) {
+        pendingImages.delete(id);
+        if (await captureImage(id)) failedImages.delete(id); else failedImages.add(id);
+      }
     }
     function codeData(id) {
       if (!codeBlocks.has(id)) codeBlocks.set(id, { lines: new Map(), lastSeen: 0 });
@@ -428,11 +431,7 @@ export async function capturePage({ stepRatio = 0.6, dwellMs, maxSteps = 400, on
       const snap = collectStep(scroller, stepRatio, sampleCode, sampleTable, sampleBlock);
       let added = snap.addedLines;
       mergeSamples(snap); added += snap.fresh.length;
-      for (const block of snap.fresh) {
-        if (["image","whiteboard"].includes(block.type) && !images.some((image) => image.blockId === block.id)) {
-          if (!await captureImage(block.id)) failedImages.add(block.id);
-        }
-      }
+      await collectImages(snap);
       const percent = Math.max(0, Math.min(95, Math.round(
         (snap.scrollTop / Math.max(1, snap.sh - snap.ch)) * 95,
       )));
@@ -508,11 +507,7 @@ export async function capturePage({ stepRatio = 0.6, dwellMs, maxSteps = 400, on
       checkStop();
       const snap = collectStep(scroller, 0, sampleCode, sampleTable, sampleBlock);
       mergeSamples(snap);
-      for (const block of snap.fresh) {
-        if (["image","whiteboard"].includes(block.type) && !images.some((image) => image.blockId === block.id)) {
-          if (!await captureImage(block.id)) failedImages.add(block.id);
-        }
-      }
+      await collectImages(snap);
     }
     const hasBlock = (id) => blocks.has(String(id));
     async function sampleMissingBlock(id) {
@@ -735,11 +730,15 @@ export async function capturePage({ stepRatio = 0.6, dwellMs, maxSteps = 400, on
       }
       writeTable(block, saved);
     }
-    for (const id of [...failedImages]) {
+    for (const id of new Set([...failedImages,...imageStates.keys()])) {
       checkStop();
-      if (!await revealBlock(id, positions.get(id))) continue;
+      if (!await revealBlock(id, positions.get(id))) {
+        if (blocks.get(id)?.type === 'image') imageErrors.set(id,'未能定位图片以复核已加载位图');
+        continue;
+      }
       if (await captureImage(id)) failedImages.delete(id);
     }
+    for (const [id,reason] of imageErrors) warnings.push({code:'image_unreadable',label:'图片块 ' + id + '：' + reason});
     for (const [id,reason] of whiteboardErrors) {
       warnings.push({code:'image_unreadable',label:'白板块 ' + id + '：' + reason});
     }
