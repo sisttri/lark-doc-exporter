@@ -486,6 +486,28 @@ test('imageHtmlPath 按 MIME 映射扩展名，未知 MIME 依次回退 file 后
   assert.equal(imageHtmlPath({ blockId: '14', mime: 'image/png; charset=binary' }), 'images/14.png');
 });
 
+test('whiteboard 已采静态预览在根级、表格与引用中复用图片素材', () => {
+  const board = (id) => ({id, type:'whiteboard', html:'<div data-block-type="whiteboard" data-block-id="' + id + '"><svg aria-label="预览控件"><path d="M0 0h1"></path></svg><canvas></canvas></div>'});
+  const root = board('7'), cell = board('17'), nested = board('27');
+  const result = convertCapture(captureOf([
+    root,
+    tableBlock('10', '<tr><td>' + cell.html + '</td></tr>'),
+    {id:'20', type:'synced_reference', html:'<div data-block-type="synced_reference" data-block-id="20"><div data-block-type="page" data-block-id="21">' + nested.html + '</div></div>'},
+  ], {images:['7','17','27'].map(blockId => ({blockId, mime:'image/png', width:20, height:30}))}));
+  const images = elements(result.html, 'img');
+  assert.deepEqual(images.map(image => attrOf(image, 'src')), ['images/7.png','images/17.png','images/27.png']);
+  assert.ok(images.every(image => attrOf(image, 'alt') === '白板静态预览（当前画面）'));
+  assert.equal(elements(result.html, 'td')[0].childNodes.filter(node => node.tagName === 'img').length, 1);
+  assert.deepEqual(result.warnings, []);
+});
+
+test('whiteboard 未采到静态预览时明确提示缺少素材', () => {
+  const result = convertCapture(captureOf([{id:'7',type:'whiteboard',html:'<div data-block-type="whiteboard" data-block-id="7"><canvas></canvas></div>'}]));
+  assert.equal(elements(result.html, 'img').length, 0);
+  assert.deepEqual(result.warnings.map(({code}) => code), ['missing_image']);
+  assert.match(result.warnings[0].label, /白板块 7/u);
+});
+
 // ---------- 引用 / 分割线 / 待办 ----------
 
 test('quote、callout、divider、todo 映射为 blockquote/hr/待办段落', () => {

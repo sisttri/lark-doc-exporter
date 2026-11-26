@@ -9629,6 +9629,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
     "ordered",
     "code",
     "image",
+    "whiteboard",
     "quote",
     "callout",
     "quote_container",
@@ -9688,6 +9689,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
       return cleanText(explicit || (annotation ? textContent(annotation) : "") || (title ? textContent(title) : "") || (node.tagName === "math" ? textContent(node) : "")).replace(/\s+/gu, " ").trim().slice(0, 2048);
     }
     function visit(node) {
+      if (nodeAttr(node, "data-block-type") === "whiteboard") return;
       for (let index = 0; index < (node.childNodes || []).length; index++) {
         const child = node.childNodes[index];
         if (!child.tagName || isHidden(child)) continue;
@@ -10066,15 +10068,17 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
     }
     function renderImage(info) {
       const image = imageByBlock.get(info.id);
+      const label = info.type === "whiteboard" ? "白板块 " : "图片块 ";
       if (!image) {
-        addWarning("missing_image", "图片块 " + info.id + " 缺少素材");
+        addWarning("missing_image", label + info.id + " 缺少素材");
         return null;
       }
       const mime = String(image.mime ?? "").split(";", 1)[0].trim().toLowerCase();
       if (mime && !MIME_EXTENSIONS[mime]) {
-        addWarning("invalid_image", "图片块 " + info.id + " 的 MIME 类型不受支持：" + mime);
+        addWarning("invalid_image", label + info.id + " 的 MIME 类型不受支持：" + mime);
       }
       let alt = sanitizeImageAlt(image.alt);
+      if (!alt && info.type === "whiteboard") alt = "白板静态预览（当前画面）";
       if (!alt) {
         const element = findFirstElement(info.element, (node) => node.tagName === "img");
         alt = sanitizeImageAlt(element ? nodeAttr(element, "alt") : "");
@@ -10116,6 +10120,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
         case "code":
           return renderCode(info);
         case "image":
+        case "whiteboard":
           return renderImage(info);
         case "file":
           return renderFile2(info);
@@ -10194,6 +10199,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
         case "code":
           return renderCode(info);
         case "image":
+        case "whiteboard":
           return renderImage(info);
         case "file":
           return renderFile2(info);
@@ -10228,7 +10234,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
         addWarning("unsupported_block", "块 " + (id || "(无 id)") + " 无法解析");
         continue;
       }
-      normalizeRichContent(element, id, addWarning);
+      if (type !== "whiteboard") normalizeRichContent(element, id, addWarning);
       infos.push({ id, type, element });
     }
     const rawTitle = cleanText(capture.source?.title ?? "").replace(/\s+/gu, " ").trim();
@@ -11856,6 +11862,103 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
     return source;
   }
 
+  // src/userscript/whiteboard.js
+  var CONTENT_CANVAS = ".whiteboad-x-content-canvas canvas.whiteboad-x-normal-canvas";
+  function styleOf(node) {
+    return node.ownerDocument?.defaultView?.getComputedStyle(node) || {};
+  }
+  function findWhiteboardCanvas(block) {
+    if (!block) return null;
+    const candidates = [...block.querySelectorAll(CONTENT_CANVAS)].filter((canvas) => {
+      if (canvas.isConnected === false || canvas.closest("[data-block-type]") !== block) return false;
+      const stage = canvas.closest(".whiteboad-x-canvas-container");
+      const box = canvas.getBoundingClientRect();
+      if (!stage || !block.contains(stage) || !canvas.width || !canvas.height || !box.width || !box.height) return false;
+      for (let node = canvas; node; node = node.parentElement) {
+        const style = styleOf(node);
+        const role = node.getAttribute("role");
+        if (node.hidden || node.getAttribute("aria-hidden") === "true" || ["BUTTON", "INPUT", "SELECT"].includes(node.tagName) || ["button", "toolbar", "menu", "menuitem"].includes(role) || /(?:^|[-_\s])(?:mini[-_]?map|toolbar|auxiliary)(?:$|[-_\s])/iu.test(String(node.className || "")) || style.display === "none" || ["hidden", "collapse"].includes(style.visibility) || style.opacity === "0") return false;
+        if (node === block) break;
+      }
+      return true;
+    });
+    return candidates.length === 1 ? candidates[0] : null;
+  }
+  function backgroundOf(canvas, block) {
+    for (let node = canvas; node; node = node.parentElement) {
+      const color2 = styleOf(node).backgroundColor || "";
+      const rgb = /^rgba?\(([^)]+)\)$/iu.exec(color2);
+      const channels = rgb?.[1].trim().split(/[\s,/]+/u).map(Number);
+      if (channels?.every(Number.isFinite) && (channels.length === 3 || channels.length === 4 && channels[3] === 1)) return color2;
+      if (node === block) break;
+    }
+    return "#ffffff";
+  }
+  function hasDrawnPixels(canvas) {
+    const context = canvas.getContext("2d");
+    if (!context) throw new Error("白板内容画布无法读取");
+    const rows = Math.max(1, Math.floor(65536 / canvas.width));
+    for (let top = 0; top < canvas.height; top += rows) {
+      const pixels = context.getImageData(0, top, canvas.width, Math.min(rows, canvas.height - top)).data;
+      for (let index = 3; index < pixels.length; index += 4) if (pixels[index]) return true;
+    }
+    return false;
+  }
+  function withinImageLimits(canvas) {
+    return canvas.width <= 8192 && canvas.height <= 8192 && canvas.width * canvas.height <= 16e6;
+  }
+  function isWhiteboardReady(block) {
+    const canvas = findWhiteboardCanvas(block);
+    if (!canvas || !withinImageLimits(canvas)) return false;
+    try {
+      return hasDrawnPixels(canvas);
+    } catch {
+      return false;
+    }
+  }
+  async function captureWhiteboardPreview(id, { document: document2 = globalThis.document, wait: wait2, checkStop } = {}) {
+    const started = Date.now();
+    let previous, size = "", stableSince = started, empty = false;
+    while (Date.now() - started <= 2500) {
+      checkStop();
+      const block = document2.querySelector('[data-block-id="' + id + '"]');
+      const source = findWhiteboardCanvas(block);
+      if (source) {
+        const { width, height } = source;
+        if (!withinImageLimits(source)) throw new Error("白板预览尺寸超过图片限制");
+        const nextSize = width + ":" + height;
+        if (source !== previous || nextSize !== size) {
+          previous = source;
+          size = nextSize;
+          stableSince = Date.now();
+        }
+        if (Date.now() - stableSince >= 120) {
+          empty = !hasDrawnPixels(source);
+          if (!empty) {
+            checkStop();
+            const canvas = document2.createElement("canvas");
+            canvas.width = width;
+            canvas.height = height;
+            const context = canvas.getContext("2d");
+            if (!context) throw new Error("白板预览画布无法创建");
+            context.fillStyle = backgroundOf(source, block);
+            context.fillRect(0, 0, width, height);
+            context.drawImage(source, 0, 0);
+            const dataUrl2 = canvas.toDataURL("image/png");
+            if (!/^data:image\/png;base64,[A-Za-z0-9+/]+={0,2}$/u.test(dataUrl2)) throw new Error("白板预览未生成有效PNG");
+            return { blockId: id, mime: "image/png", width, height, alt: "白板静态预览（当前画面）", dataUrl: dataUrl2 };
+          }
+        }
+      } else {
+        previous = null;
+        size = "";
+      }
+      await wait2(60);
+    }
+    checkStop();
+    throw new Error(empty ? "白板内容画面尚未绘制，预览未确认" : "未读到唯一且可见的白板内容画布");
+  }
+
   // src/userscript/capture.js
   var ZERO_WIDTH3 = /[\u200b\u200c\u200d\u2060\ufeff]/gu;
   var CODE_ROW = ".code-line-wrapper[data-line-num]";
@@ -12024,6 +12127,10 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
             if (type === "image") {
               const img = el.querySelector("img");
               if (!img?.complete || !img.naturalWidth) ready = false;
+            } else if (type === "whiteboard") {
+              const canvas = findWhiteboardCanvas(el);
+              parts.push(canvas ? [canvas.width, canvas.height] : null);
+              if (!isWhiteboardReady(el)) ready = false;
             } else if (!text && type !== "divider" && !/\bisEmpty\b/u.test(el.outerHTML)) ready = false;
           }
         }
@@ -12051,6 +12158,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
             const ready = parts.length ? parts.every((part) => {
               const type = part.getAttribute("data-block-type");
               if (type === "image") return Boolean(part.querySelector("img"));
+              if (type === "whiteboard") return isWhiteboardReady(part);
               if (type === "code") return Boolean(part.querySelector(CODE_ROW));
               if (type === "divider") return true;
               if (type === "text" || type === "bullet" || type === "ordered" || type === "todo" || type.startsWith("heading")) {
@@ -12063,7 +12171,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
             const center = rect.height > 0 ? offset + rect.top + rect.height / 2 : previous?.center;
             if (previous?.ready && !ready) continue;
             const html = cell.outerHTML;
-            if (previous?.html === html) continue;
+            if (previous?.html === html && previous.ready === ready) continue;
             const semantic = ready ? semanticContent(html, true) : null;
             if (previous?.ready && ready && previous.semantic && semantic && semantic.text.trim() && semantic.fingerprint !== previous.semantic.fingerprint && length <= previous.length && !semantic.nested && !previous.semantic.nested) {
               if (length === previous.length) contentChanged(key, "表格单元格");
@@ -12202,7 +12310,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
             const cells = tables.get(block.id)?.cells;
             content = cells ? JSON.stringify([...cells].map(([key, cell]) => [key, cell.ready, cell.semantic?.fingerprint])) : "";
             if (cells?.size) ready = true;
-          } else if (!CONTAINER_TYPES.has(block.type) && block.semantic?.text.trim() || block.type === "image" && images.some((image) => image.blockId === block.id) || /\bisEmpty\b/u.test(block.html)) ready = true;
+          } else if (!CONTAINER_TYPES.has(block.type) && block.semantic?.text.trim() || ["image", "whiteboard"].includes(block.type) && images.some((image) => image.blockId === block.id) || block.type === "whiteboard" && isWhiteboardReady(document.querySelector('[data-block-id="' + block.id + '"]')) || /\bisEmpty\b/u.test(block.html)) ready = true;
           descendants.push([block.id, block.parentId, block.type, content]);
         }
         return { signature: JSON.stringify(descendants), ready };
@@ -12262,6 +12370,17 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
       const scoreOf = (el) => (el.textContent ? el.textContent.length : 0) * 1e3 + el.querySelectorAll("*").length;
       const tables = /* @__PURE__ */ new Map();
       async function captureImage(id) {
+        if (blocks.get(id)?.type === "whiteboard") {
+          try {
+            images.push(await captureWhiteboardPreview(id, { wait, checkStop }));
+            whiteboardErrors.delete(id);
+            return true;
+          } catch (error) {
+            if (error.name === "AbortError") throw error;
+            whiteboardErrors.set(id, String(error.message || error).slice(0, 120));
+            return false;
+          }
+        }
         const el = document.querySelector('[data-block-id="' + id + '"]');
         const img = el ? el.querySelector("img") : null;
         if (!img) return false;
@@ -12295,6 +12414,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
       const codeBlocks = /* @__PURE__ */ new Map();
       const images = [];
       const failedImages = /* @__PURE__ */ new Set();
+      const whiteboardErrors = /* @__PURE__ */ new Map();
       let noProgress = 0;
       let steps = 0;
       for (; steps < maxSteps; steps++) {
@@ -12304,7 +12424,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
         mergeSamples(snap);
         added += snap.fresh.length;
         for (const block of snap.fresh) {
-          if (block.type === "image" && !images.some((image) => image.blockId === block.id)) {
+          if (["image", "whiteboard"].includes(block.type) && !images.some((image) => image.blockId === block.id)) {
             if (!await captureImage(block.id)) failedImages.add(block.id);
           }
         }
@@ -12372,7 +12492,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
         const snap = collectStep(scroller, 0, sampleCode, sampleTable, sampleBlock);
         mergeSamples(snap);
         for (const block of snap.fresh) {
-          if (block.type === "image" && !images.some((image) => image.blockId === block.id)) {
+          if (["image", "whiteboard"].includes(block.type) && !images.some((image) => image.blockId === block.id)) {
             if (!await captureImage(block.id)) failedImages.add(block.id);
           }
         }
@@ -12452,6 +12572,8 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
               if (block.type === "image") {
                 const image = el.querySelector("img");
                 if (!image?.complete || !image.naturalWidth) continue;
+              } else if (block.type === "whiteboard") {
+                if (!isWhiteboardReady(el)) continue;
               } else if (!cleanText3(content.textContent) && !/\bisEmpty\b/u.test(content.outerHTML)) continue;
               parts.push([block.id, content.textContent]);
             }
@@ -12584,6 +12706,9 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
         checkStop();
         if (!await revealBlock(id, positions.get(id))) continue;
         if (await captureImage(id)) failedImages.delete(id);
+      }
+      for (const [id, reason] of whiteboardErrors) {
+        warnings2.push({ code: "image_unreadable", label: "白板块 " + id + "：" + reason });
       }
       async function sampleWindow(id, y, reached) {
         checkStop();
@@ -12759,6 +12884,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
         "code",
         "table",
         "image",
+        "whiteboard",
         "quote",
         "quote_container",
         "synced_reference",

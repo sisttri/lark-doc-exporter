@@ -16,7 +16,7 @@ const RASTER_EXTENSIONS = new Set(['png', 'jpg', 'gif', 'webp']);
 const HEADING_TYPE = /^heading([1-6])$/u;
 const ESCAPES = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
 const CELL_BLOCK_TYPES = new Set([
-  'text', 'bullet', 'ordered', 'code', 'image', 'quote', 'callout', 'quote_container', 'synced_reference', 'divider', 'todo',
+  'text', 'bullet', 'ordered', 'code', 'image', 'whiteboard', 'quote', 'callout', 'quote_container', 'synced_reference', 'divider', 'todo',
   'heading1', 'heading2', 'heading3', 'heading4', 'heading5', 'heading6', 'file',
 ]);
 const LANGUAGE_ALIASES = Object.freeze({
@@ -83,6 +83,7 @@ function normalizeRichContent(root, blockId, addWarning) {
       .replace(/\s+/gu, ' ').trim().slice(0, 2048);
   }
   function visit(node) {
+    if (nodeAttr(node, 'data-block-type') === 'whiteboard') return;
     for (let index = 0; index < (node.childNodes || []).length; index++) {
       const child = node.childNodes[index];
       if (!child.tagName || isHidden(child)) continue;
@@ -539,15 +540,17 @@ export function convertCapture(capture) {
 
   function renderImage(info) {
     const image = imageByBlock.get(info.id);
+    const label = info.type === 'whiteboard' ? '白板块 ' : '图片块 ';
     if (!image) {
-      addWarning('missing_image', '图片块 ' + info.id + ' 缺少素材');
+      addWarning('missing_image', label + info.id + ' 缺少素材');
       return null;
     }
     const mime = String(image.mime ?? '').split(';', 1)[0].trim().toLowerCase();
     if (mime && !MIME_EXTENSIONS[mime]) {
-      addWarning('invalid_image', '图片块 ' + info.id + ' 的 MIME 类型不受支持：' + mime);
+      addWarning('invalid_image', label + info.id + ' 的 MIME 类型不受支持：' + mime);
     }
     let alt = sanitizeImageAlt(image.alt);
+    if (!alt && info.type === 'whiteboard') alt = '白板静态预览（当前画面）';
     if (!alt) {
       const element = findFirstElement(info.element, (node) => node.tagName === 'img');
       alt = sanitizeImageAlt(element ? nodeAttr(element, 'alt') : '');
@@ -587,7 +590,8 @@ export function convertCapture(capture) {
       case 'bullet':
       case 'ordered': return renderList(info.type, [info]);
       case 'code': return renderCode(info);
-      case 'image': return renderImage(info);
+      case 'image':
+      case 'whiteboard': return renderImage(info);
       case 'file': return renderFile(info);
       case 'quote':
       case 'callout': return renderQuote(info);
@@ -662,7 +666,8 @@ export function convertCapture(capture) {
     switch (info.type) {
       case 'text': return renderText(info);
       case 'code': return renderCode(info);
-      case 'image': return renderImage(info);
+      case 'image':
+      case 'whiteboard': return renderImage(info);
       case 'file': return renderFile(info);
       case 'table': return renderTable(info);
       case 'quote':
@@ -691,7 +696,7 @@ export function convertCapture(capture) {
       addWarning('unsupported_block', '块 ' + (id || '(无 id)') + ' 无法解析');
       continue;
     }
-    normalizeRichContent(element, id, addWarning);
+    if (type !== 'whiteboard') normalizeRichContent(element, id, addWarning);
     infos.push({ id, type, element });
   }
 

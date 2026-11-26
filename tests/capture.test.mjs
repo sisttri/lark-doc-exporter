@@ -3,8 +3,148 @@ import assert from 'node:assert/strict';
 import { capturePage } from '../src/userscript/capture.js';
 import { convertCapture } from '../src/feishu.js';
 import { readDocumentParts } from '../src/importer.js';
+import { whiteboardFixture, pngDataUrl } from './helpers/whiteboard.mjs';
 
 const ROW = '.code-line-wrapper[data-line-num]';
+
+function virtualWhiteboard(t, {mounted = () => true, decoys = false} = {}) {
+  const session = virtualDocument(t,{textIds:[],totalHeight:600});
+  const fixture = whiteboardFixture({decoys});
+  const doc = globalThis.document;
+  const page = doc.querySelector('.page-block');
+  const originalOne = doc.querySelector, originalAll = doc.querySelectorAll, originalCreate = doc.createElement;
+  fixture.block.parentElement = {closest:() => page};
+  fixture.block.getBoundingClientRect = () => ({top:120-session.scroller.scrollTop,bottom:152-session.scroller.scrollTop,height:32,width:64});
+  fixture.block.scrollIntoView = () => { session.scroller.scrollTop = 56; };
+  const all = fixture.block.querySelectorAll;
+  fixture.block.querySelectorAll = selector => mounted(session) ? all.call(fixture.block,selector) : [];
+  doc.querySelector = selector => selector === '[data-block-id="board"]' ? fixture.block : originalOne(selector);
+  doc.querySelectorAll = selector => selector === '[data-block-id]' ? [page,fixture.block] : originalAll(selector);
+  doc.createElement = tag => tag === 'canvas' ? fixture.document.createElement(tag) : originalCreate(tag);
+  return {...session,...fixture};
+}
+
+test('白板内容canvas保存为PNG，排除辅助层、缩略图和隐藏或工具画布', async t => {
+  const session = virtualWhiteboard(t,{decoys:true});
+  const result = await capturePage({onProgress:session.onProgress});
+  assert.deepEqual(result.images,[{blockId:'board',mime:'image/png',width:64,height:32,alt:'白板静态预览（当前画面）',dataUrl:pngDataUrl}]);
+  assert.deepEqual(session.draws,[[session.content,0,0]]);
+  assert.deepEqual(session.fills,[{color:'#ffffff',args:[0,0,64,32]}]);
+  assert.deepEqual(result.warnings,[]);
+  assert.equal(session.scroller.scrollTop,session.originalTop);
+});
+
+test('白板内容层迟挂载时有界等待并采集最终节点', async t => {
+  const session = virtualWhiteboard(t,{mounted:clock => clock.elapsed() >= 1400});
+  const result = await capturePage({onProgress:session.onProgress});
+  assert.equal(result.images.length,1);
+  assert.deepEqual(result.warnings,[]);
+});
+
+test('白板没有可读内容画布时给出明确失败并恢复阅读位置', async t => {
+  const session = virtualWhiteboard(t,{mounted:() => false});
+  const result = await capturePage({onProgress:session.onProgress});
+  assert.deepEqual(result.images,[]);
+  assert.ok(result.warnings.some(warning => warning.code === 'image_unreadable' && warning.label.includes('白板')));
+  assert.equal(session.scroller.scrollTop,session.originalTop);
+});
+
+test('白板等待期间取消会停止采集并恢复阅读位置', async t => {
+  const session = virtualWhiteboard(t,{mounted:() => false});
+  await assert.rejects(capturePage({onProgress:session.onProgress,shouldStop:() => session.elapsed() >= 1500}),{name:'AbortError'});
+  assert.equal(session.scroller.scrollTop,session.originalTop);
+});
+
+test('白板首次不可读在定向补采后恢复，不保留已恢复的失败提示', async t => {
+  const session = virtualWhiteboard(t);
+  let readable = false;
+  const create = globalThis.document.createElement;
+  globalThis.document.createElement = tag => {
+    const canvas = create(tag);
+    if (tag === 'canvas') canvas.toDataURL = () => {
+      if (!readable) throw new Error('合成暂不可读');
+      return pngDataUrl;
+    };
+    return canvas;
+  };
+  const result = await capturePage({onProgress(progress) {
+    session.onProgress(progress); if (progress.stage === 'audit') readable=true;
+  }});
+  assert.equal(result.images.length,1);
+  assert.deepEqual(result.warnings,[]);
+  assert.equal(session.scroller.scrollTop,session.originalTop);
+});
+
+for (const recovers of [false,true]) {
+test(recovers ? '引用内白板补采恢复后不保留正文未加载提示' : '同步引用只有白板时以内容画布复核，不误报正文未加载', async t => {
+  const session = virtualWhiteboard(t);
+  const doc = globalThis.document;
+  const originalOne = doc.querySelector, originalAll = doc.querySelectorAll;
+  const pageParent = session.block.parentElement;
+  const reference = {
+    parentElement:pageParent,textContent:'',
+    outerHTML:'<div data-block-id="reference" data-block-type="synced_reference">' + session.block.outerHTML + '</div>',
+    getAttribute:name => ({'data-block-id':'reference','data-block-type':'synced_reference'})[name] ?? null,
+    getBoundingClientRect:() => ({top:90-session.scroller.scrollTop,bottom:190-session.scroller.scrollTop,height:100}),
+    querySelectorAll:() => [session.block],
+    scrollIntoView() {session.scroller.scrollTop=90;},
+  };
+  session.block.parentElement = {closest:() => reference};
+  doc.querySelector = selector => selector === '[data-block-id="reference"]' ? reference : originalOne(selector);
+  doc.querySelectorAll = selector => selector === '[data-block-id]' ? [originalOne('.page-block'),reference,session.block] : originalAll(selector);
+  let readable = !recovers;
+  const create = doc.createElement;
+  doc.createElement = tag => {
+    const canvas = create(tag);
+    if (tag === 'canvas') canvas.toDataURL = () => {
+      if (!readable) throw new Error('合成暂不可读');
+      return pngDataUrl;
+    };
+    return canvas;
+  };
+  const result = await capturePage({onProgress(progress) {
+    session.onProgress(progress); if (progress.stage === 'audit') readable=true;
+  }});
+  assert.equal(result.images.length,1);
+  assert.equal(result.blocks[0].type,'synced_reference');
+  assert.deepEqual(result.warnings,[]);
+  assert.equal(session.scroller.scrollTop,session.originalTop);
+});
+}
+
+for (const delayedPixels of [false,true]) {
+test(delayedPixels ? '表格白板透明画布随后绘制时更新就绪状态，即使HTML完全相同' : '表格单元格内白板画布已挂载时按已就绪内容保留', async t => {
+  const session = virtualWhiteboard(t);
+  if (delayedPixels) session.content.alpha = 0;
+  const doc = globalThis.document;
+  const originalOne = doc.querySelector, originalAll = doc.querySelectorAll;
+  const cell = {
+    outerHTML:'<td>' + session.block.outerHTML + '</td>',textContent:'',
+    getAttribute:() => null,querySelectorAll:() => [session.block],
+    getBoundingClientRect:session.block.getBoundingClientRect,
+  };
+  const row = {cells:[cell],parentElement:{localName:'tbody'},getAttribute:() => null,cloneNode:() => ({outerHTML:'<tr></tr>'})};
+  const table = {
+    parentElement:session.block.parentElement,textContent:'',
+    outerHTML:'<div data-block-id="table" data-block-type="table"><table><tbody><tr>' + cell.outerHTML + '</tr></tbody></table></div>',
+    getAttribute:name => ({'data-block-id':'table','data-block-type':'table'})[name] ?? null,
+    getBoundingClientRect:session.block.getBoundingClientRect,
+    querySelector:selector => selector === 'table' ? {rows:[row]} : null,
+    querySelectorAll:() => [session.block],
+  };
+  session.block.parentElement = {closest:() => table};
+  doc.querySelector = selector => selector === '[data-block-id="table"]' ? table : originalOne(selector);
+  doc.querySelectorAll = selector => selector === '[data-block-id]' ? [originalOne('.page-block'),table,session.block] : originalAll(selector);
+  const originalHtml = cell.outerHTML;
+  const result = await capturePage({onProgress(progress) {
+    session.onProgress(progress); if (progress.stage === 'audit') session.content.alpha=255;
+  }});
+  assert.equal(result.images.length,1);
+  assert.equal(cell.outerHTML,originalHtml);
+  assert.match(result.blocks[0].html,/data-block-type="whiteboard"/u);
+  assert.deepEqual(result.warnings,[]);
+});
+}
 
 // A virtual editor retains a spacer at each unrendered end of the code zone.
 // Reading immediately after scrolling still sees the previous rendered rows.

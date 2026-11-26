@@ -3,6 +3,7 @@
 // 不调用飞书接口/CLI，不额外发送网络请求。
 import { parseFragment, serialize } from "parse5";
 import { readDocumentSource } from './source.js';
+import { captureWhiteboardPreview, findWhiteboardCanvas, isWhiteboardReady } from './whiteboard.js';
 export { readDocumentSource } from './source.js';
 
 const ZERO_WIDTH = /[\u200b\u200c\u200d\u2060\ufeff]/gu;
@@ -181,6 +182,10 @@ export async function capturePage({ stepRatio = 0.6, dwellMs, maxSteps = 400, on
           if (type === 'image') {
             const img = el.querySelector('img');
             if (!img?.complete || !img.naturalWidth) ready = false;
+          } else if (type === 'whiteboard') {
+            const canvas = findWhiteboardCanvas(el);
+            parts.push(canvas ? [canvas.width,canvas.height] : null);
+            if (!isWhiteboardReady(el)) ready = false;
           } else if (!text && type !== 'divider' && !/\bisEmpty\b/u.test(el.outerHTML)) ready = false;
         }
       }
@@ -231,6 +236,7 @@ export async function capturePage({ stepRatio = 0.6, dwellMs, maxSteps = 400, on
           const ready = parts.length ? parts.every(part => {
             const type = part.getAttribute("data-block-type");
             if (type === "image") return Boolean(part.querySelector("img"));
+            if (type === "whiteboard") return isWhiteboardReady(part);
             if (type === "code") return Boolean(part.querySelector(CODE_ROW));
             if (type === "divider") return true;
             if (type === "text" || type === "bullet" || type === "ordered" || type === "todo" || type.startsWith("heading")) {
@@ -243,7 +249,7 @@ export async function capturePage({ stepRatio = 0.6, dwellMs, maxSteps = 400, on
           const center = rect.height > 0 ? offset + rect.top + rect.height / 2 : previous?.center;
           if (previous?.ready && !ready) continue;
           const html = cell.outerHTML;
-          if (previous?.html === html) continue;
+          if (previous?.html === html && previous.ready === ready) continue;
           const semantic = ready ? semanticContent(html, true) : null;
           if (previous?.ready && ready && previous.semantic && semantic && semantic.text.trim()
             && semantic.fingerprint !== previous.semantic.fingerprint && length <= previous.length
@@ -300,6 +306,17 @@ export async function capturePage({ stepRatio = 0.6, dwellMs, maxSteps = 400, on
 
     // 图片：块首次出现时从页面已加载位图复制（canvas），不额外请求资源。
     async function captureImage(id) {
+      if (blocks.get(id)?.type === 'whiteboard') {
+        try {
+          images.push(await captureWhiteboardPreview(id,{wait,checkStop}));
+          whiteboardErrors.delete(id);
+          return true;
+        } catch (error) {
+          if (error.name === 'AbortError') throw error;
+          whiteboardErrors.set(id,String(error.message || error).slice(0,120));
+          return false;
+        }
+      }
       const el = document.querySelector('[data-block-id="' + id + '"]');
       const img = el ? el.querySelector("img") : null;
       if (!img) return false;
@@ -334,6 +351,7 @@ export async function capturePage({ stepRatio = 0.6, dwellMs, maxSteps = 400, on
     const codeBlocks = new Map();
     const images = [];
     const failedImages = new Set();
+    const whiteboardErrors = new Map();
     function sampleBlock(el) {
       const id = el.getAttribute('data-block-id');
       const stored = blocks.get(id), html = el.outerHTML;
@@ -411,7 +429,7 @@ export async function capturePage({ stepRatio = 0.6, dwellMs, maxSteps = 400, on
       let added = snap.addedLines;
       mergeSamples(snap); added += snap.fresh.length;
       for (const block of snap.fresh) {
-        if (block.type === "image" && !images.some((image) => image.blockId === block.id)) {
+        if (["image","whiteboard"].includes(block.type) && !images.some((image) => image.blockId === block.id)) {
           if (!await captureImage(block.id)) failedImages.add(block.id);
         }
       }
@@ -491,7 +509,7 @@ export async function capturePage({ stepRatio = 0.6, dwellMs, maxSteps = 400, on
       const snap = collectStep(scroller, 0, sampleCode, sampleTable, sampleBlock);
       mergeSamples(snap);
       for (const block of snap.fresh) {
-        if (block.type === "image" && !images.some((image) => image.blockId === block.id)) {
+        if (["image","whiteboard"].includes(block.type) && !images.some((image) => image.blockId === block.id)) {
           if (!await captureImage(block.id)) failedImages.add(block.id);
         }
       }
@@ -563,7 +581,8 @@ export async function capturePage({ stepRatio = 0.6, dwellMs, maxSteps = 400, on
           content = cells ? JSON.stringify([...cells].map(([key,cell])=>[key,cell.ready,cell.semantic?.fingerprint])) : '';
           if (cells?.size) ready = true;
         } else if ((!CONTAINER_TYPES.has(block.type) && block.semantic?.text.trim())
-          || block.type === 'image' && images.some(image=>image.blockId===block.id)
+          || ['image','whiteboard'].includes(block.type) && images.some(image=>image.blockId===block.id)
+          || block.type === 'whiteboard' && isWhiteboardReady(document.querySelector('[data-block-id="' + block.id + '"]'))
           || /\bisEmpty\b/u.test(block.html)) ready = true;
         descendants.push([block.id,block.parentId,block.type,content]);
       }
@@ -603,6 +622,8 @@ export async function capturePage({ stepRatio = 0.6, dwellMs, maxSteps = 400, on
             if (block.type === 'image') {
               const image = el.querySelector('img');
               if (!image?.complete || !image.naturalWidth) continue;
+            } else if (block.type === 'whiteboard') {
+              if (!isWhiteboardReady(el)) continue;
             } else if (!cleanText(content.textContent) && !/\bisEmpty\b/u.test(content.outerHTML)) continue;
             parts.push([block.id,content.textContent]);
           }
@@ -718,6 +739,9 @@ export async function capturePage({ stepRatio = 0.6, dwellMs, maxSteps = 400, on
       checkStop();
       if (!await revealBlock(id, positions.get(id))) continue;
       if (await captureImage(id)) failedImages.delete(id);
+    }
+    for (const [id,reason] of whiteboardErrors) {
+      warnings.push({code:'image_unreadable',label:'白板块 ' + id + '：' + reason});
     }
     // 只滚到该代码块的缺行窗口。渲染可能比滚动慢，原地分次采样，并按读到的实际行号结束等待。
     async function sampleWindow(id, y, reached) {
@@ -925,7 +949,7 @@ export async function capturePage({ stepRatio = 0.6, dwellMs, maxSteps = 400, on
     }
 
     const knownRootTypes = new Set(["heading1", "heading2", "heading3", "heading4", "heading5", "heading6", "text",
-      "bullet", "ordered", "code", "table", "image", "quote", "quote_container", "synced_reference", "callout", "divider", "todo", "grid", "file"]);
+      "bullet", "ordered", "code", "table", "image", "whiteboard", "quote", "quote_container", "synced_reference", "callout", "divider", "todo", "grid", "file"]);
     for (const type of new Set(roots.map((block) => block.type))) {
       if (!knownRootTypes.has(type)) warnings.push({ code: "unsupported_block", label: "未适配的块类型：" + type });
     }
