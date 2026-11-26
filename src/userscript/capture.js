@@ -5,6 +5,7 @@ import { parseFragment, serialize } from "parse5";
 import { readDocumentSource } from './source.js';
 import { captureWhiteboardPreview, findWhiteboardCanvas, isWhiteboardReady } from './whiteboard.js';
 import { captureLoadedImage, readImageState, sameImageState } from './image.js';
+import { captureDiagram } from './diagram.js';
 import { createTableStyleCapture } from './table.js';
 import { columnGroupHtml, isAuxiliaryTable, logicalTableRows } from '../table-style.js';
 export { readDocumentSource } from './source.js';
@@ -189,6 +190,8 @@ export async function capturePage({ stepRatio = 0.6, dwellMs, maxSteps = 400, on
             const canvas = findWhiteboardCanvas(el);
             parts.push(canvas ? [canvas.width,canvas.height] : null);
             if (!isWhiteboardReady(el)) ready = false;
+          } else if (type === 'diagram') {
+            parts.push(el.outerHTML);
           } else if (!text && type !== 'divider' && !/\bisEmpty\b/u.test(el.outerHTML)) ready = false;
         }
       }
@@ -256,6 +259,7 @@ export async function capturePage({ stepRatio = 0.6, dwellMs, maxSteps = 400, on
             const type = part.getAttribute("data-block-type");
             if (type === "image") return Boolean(part.querySelector("img"));
             if (type === "whiteboard") return isWhiteboardReady(part);
+            if (type === "diagram") return images.some(image => image.blockId === part.getAttribute('data-block-id'));
             if (type === "code") return Boolean(part.querySelector(CODE_ROW));
             if (type === "divider") return true;
             if (type === "text" || type === "bullet" || type === "ordered" || type === "todo" || type.startsWith("heading")) {
@@ -325,8 +329,24 @@ export async function capturePage({ stepRatio = 0.6, dwellMs, maxSteps = 400, on
       block.html = serialize(fragment);
     }
 
-    // 普通图片复制已加载位图，画板优先本页场景渲染；不自行请求原件。
+    // 普通图片复制已加载位图，图形由本页原生渲染器输出；不自行请求原件。
     async function captureImage(id) {
+      if (blocks.get(id)?.type === 'diagram') {
+        try {
+          const image = await captureDiagram(document,id,{
+            pageView:typeof unsafeWindow === 'undefined' ? globalThis : unsafeWindow,checkStop,
+          });
+          if (!image) throw new Error('未能读取完整图表，请等待图表加载完成后重试');
+          const index = images.findIndex(saved => saved.blockId === id);
+          if (index < 0) images.push(image); else images[index]=image;
+          diagramErrors.delete(id);
+          return true;
+        } catch (error) {
+          if (error.name === 'AbortError') throw error;
+          diagramErrors.set(id,String(error.message || error).slice(0,120));
+          return false;
+        }
+      }
       if (blocks.get(id)?.type === 'whiteboard') {
         try {
           images.push(await captureWhiteboardPreview(id,{wait,checkStop}));
@@ -358,6 +378,7 @@ export async function capturePage({ stepRatio = 0.6, dwellMs, maxSteps = 400, on
     const images = [];
     const failedImages = new Set();
     const whiteboardErrors = new Map();
+    const diagramErrors = new Map();
     const imageStates = new Map(), observedImages = new Map(), pendingImages = new Set(), imageErrors = new Map();
     function sampleBlock(el) {
       const id = el.getAttribute('data-block-id');
@@ -368,6 +389,7 @@ export async function capturePage({ stepRatio = 0.6, dwellMs, maxSteps = 400, on
         observedImages.set(id,state);
       }
       const stored = blocks.get(id), html = el.outerHTML;
+      if (type === 'diagram' && stored?.observedHtml !== html) pendingImages.add(id);
       if (stored?.observedHtml === html) return null;
       if (stored) stored.observedHtml = html;
       const score = scoreOf(el);
@@ -572,6 +594,11 @@ export async function capturePage({ stepRatio = 0.6, dwellMs, maxSteps = 400, on
 
     report({ stage: "audit", message: "核对表格、图片与代码完整性…" });
     await collectAtCurrentPosition();
+    // 图表视图可能在首轮滚动后才就绪；先补齐素材，再核对引用和表格的就绪状态。
+    for (const id of failedImages) {
+      if (blocks.get(id)?.type !== 'diagram') continue;
+      if (await revealBlock(id,positions.get(id)) && await captureImage(id)) failedImages.delete(id);
+    }
     function insideReference(block,id) {
       if (block.id === id) return false;
       let parent = block.parentId;
@@ -596,7 +623,7 @@ export async function capturePage({ stepRatio = 0.6, dwellMs, maxSteps = 400, on
           content = cells ? JSON.stringify([...cells].map(([key,cell])=>[key,cell.ready,cell.semantic?.fingerprint])) : '';
           if (cells?.size) ready = true;
         } else if ((!CONTAINER_TYPES.has(block.type) && block.semantic?.text.trim())
-          || ['image','whiteboard'].includes(block.type) && images.some(image=>image.blockId===block.id)
+          || ['image','whiteboard','diagram'].includes(block.type) && images.some(image=>image.blockId===block.id)
           || block.type === 'whiteboard' && isWhiteboardReady(document.querySelector('[data-block-id="' + block.id + '"]'))
           || /\bisEmpty\b/u.test(block.html)) ready = true;
         descendants.push([block.id,block.parentId,block.type,content]);
@@ -639,6 +666,8 @@ export async function capturePage({ stepRatio = 0.6, dwellMs, maxSteps = 400, on
               if (!image?.complete || !image.naturalWidth) continue;
             } else if (block.type === 'whiteboard') {
               if (!isWhiteboardReady(el)) continue;
+            } else if (block.type === 'diagram') {
+              if (!images.some(image => image.blockId === block.id)) continue;
             } else if (!cleanText(content.textContent) && !/\bisEmpty\b/u.test(content.outerHTML)) continue;
             parts.push([block.id,content.textContent]);
           }
@@ -764,6 +793,9 @@ export async function capturePage({ stepRatio = 0.6, dwellMs, maxSteps = 400, on
     for (const [id,reason] of imageErrors) warnings.push({code:'image_unreadable',label:'图片块 ' + id + '：' + reason});
     for (const [id,reason] of whiteboardErrors) {
       warnings.push({code:'image_unreadable',label:'白板块 ' + id + '：' + reason});
+    }
+    for (const [id,reason] of diagramErrors) {
+      warnings.push({code:'image_unreadable',label:'图表块 ' + id + '：' + reason});
     }
     // 只滚到该代码块的缺行窗口。渲染可能比滚动慢，原地分次采样，并按读到的实际行号结束等待。
     async function sampleWindow(id, y, reached) {
@@ -972,7 +1004,7 @@ export async function capturePage({ stepRatio = 0.6, dwellMs, maxSteps = 400, on
     }
 
     const knownRootTypes = new Set(["heading1", "heading2", "heading3", "heading4", "heading5", "heading6", "text",
-      "bullet", "ordered", "code", "table", "image", "whiteboard", "quote", "quote_container", "synced_reference", "view", "callout", "divider", "todo", "grid", "file"]);
+      "bullet", "ordered", "code", "table", "image", "whiteboard", "diagram", "quote", "quote_container", "synced_reference", "view", "callout", "divider", "todo", "grid", "file"]);
     for (const type of new Set(roots.map((block) => block.type))) {
       if (!knownRootTypes.has(type)) warnings.push({ code: "unsupported_block", label: "未适配的块类型：" + type });
     }

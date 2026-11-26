@@ -662,6 +662,29 @@ test('whiteboard 未采到静态预览时明确提示缺少素材', () => {
   assert.match(result.warnings[0].label, /白板块 7/u);
 });
 
+test('diagram 根级、表格与引用复用完整 PNG，不将内部 SVG 误报为行内图形', () => {
+  const diagram = id => ({id, type:'diagram', html:'<div data-block-type="diagram" data-block-id="' + id + '"><svg><path d="M0 0h1"></path></svg><svg><text>图形控件</text></svg></div>'});
+  const root = diagram('7'), cell = diagram('17'), nested = diagram('27');
+  const result = convertCapture(captureOf([
+    root,
+    tableBlock('10', '<tr><td>' + cell.html + '</td></tr>'),
+    {id:'20', type:'synced_reference', html:'<div data-block-type="synced_reference" data-block-id="20"><div data-block-type="page" data-block-id="21">' + nested.html + '</div></div>'},
+  ], {images:['7','17','27'].map(blockId => ({blockId, mime:'image/png', width:1200, height:800}))}));
+  const images = elements(result.html, 'img');
+  assert.deepEqual(images.map(image => attrOf(image, 'src')), ['images/7.png','images/17.png','images/27.png']);
+  assert.ok(images.every(image => attrOf(image, 'alt') === '图表'));
+  assert.equal(elements(result.html, 'td')[0].childNodes.filter(node => node.tagName === 'img').length, 1);
+  assert.doesNotMatch(result.html, /未转换的行内图形|图形控件/u);
+  assert.deepEqual(result.warnings, []);
+});
+
+test('diagram 无完整 PNG 时保留明确缺图提示，不重复报内部 SVG 或未知块', () => {
+  const result = convertCapture(captureOf([{id:'7',type:'diagram',html:'<div data-block-type="diagram" data-block-id="7"><svg><path d="M0 0h1"></path></svg><svg><path d="M1 1h2"></path></svg></div>'}]));
+  assert.equal(elements(result.html, 'img').length, 0);
+  assert.deepEqual(result.warnings.map(({code}) => code), ['missing_image']);
+  assert.match(result.warnings[0].label, /图表块 7.*缺少素材/u);
+});
+
 // ---------- 引用 / 分割线 / 待办 ----------
 
 test('quote、callout、divider、todo 映射为 blockquote/hr/待办段落', () => {

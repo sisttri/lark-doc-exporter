@@ -4,6 +4,7 @@ import { capturePage } from '../src/userscript/capture.js';
 import { convertCapture } from '../src/feishu.js';
 import { readDocumentParts } from '../src/importer.js';
 import { whiteboardFixture, pngDataUrl } from './helpers/whiteboard.mjs';
+import { diagramFixture } from './helpers/diagram.mjs';
 
 const ROW = '.code-line-wrapper[data-line-num]';
 
@@ -62,6 +63,31 @@ function virtualImage(t, {change = () => {}, bitmapScale = 1, hidden = false, ca
   };
   t.after(() => {if (previous) Object.defineProperty(globalThis,'createImageBitmap',previous);else delete globalThis.createImageBitmap;});
   return {...session,draws,bitmaps};
+}
+
+function virtualDiagram(t, {native = false} = {}) {
+  const session = virtualDocument(t,{textIds:[],totalHeight:600});
+  const fixture = diagramFixture();
+  const doc = globalThis.document, page = doc.querySelector('.page-block');
+  const originalOne = doc.querySelector, originalAll = doc.querySelectorAll, originalCreate = doc.createElement;
+  const block = Object.assign(fixture.block, {
+    parentElement:{closest:() => page},textContent:'',
+    outerHTML:'<div data-block-id="diagram" data-block-type="diagram" data-record-id="diagram-record"><svg><path d="M0 0h1"></path></svg><svg><path d="M1 1h2"></path></svg></div>',
+    getBoundingClientRect:() => ({top:120-session.scroller.scrollTop,bottom:152-session.scroller.scrollTop,height:32,width:64}),
+    querySelectorAll:() => [],querySelector:() => null,
+    scrollIntoView() {session.scroller.scrollTop=56;},
+  });
+  page.contains = node => node === block;
+  fixture.root.record.id = page.getAttribute('data-record-id');
+  doc.defaultView = fixture.document.defaultView;
+  doc.contains = node => node === page || node === block;
+  doc.createElement = tag => tag === 'canvas' ? fixture.document.createElement(tag) : originalCreate(tag);
+  doc.querySelector = selector => selector === '[data-block-id="diagram"]' ? block : originalOne(selector);
+  doc.querySelectorAll = selector => selector === '[data-block-id]' ? [page,block] : originalAll(selector);
+  const previous = Object.getOwnPropertyDescriptor(globalThis,'unsafeWindow');
+  globalThis.unsafeWindow = native ? fixture.pageView : {};
+  t.after(() => {if (previous) Object.defineProperty(globalThis,'unsafeWindow',previous);else delete globalThis.unsafeWindow;});
+  return {...session,...fixture,block};
 }
 
 test('普通图按已解码位图像素复制，保留高密度资源而非natural尺寸', async t => {
@@ -196,6 +222,119 @@ test('白板内容canvas保存为PNG，排除辅助层、缩略图和隐藏或�
   assert.deepEqual(session.fills,[{color:'#ffffff',args:[0,0,64,32]}]);
   assert.deepEqual(result.warnings,[]);
   assert.equal(session.scroller.scrollTop,session.originalTop);
+});
+
+test('diagram 没有可用原生视图时明确提示缺图，不误报未知块或内部 SVG', async t => {
+  const session = virtualDiagram(t);
+  const result = await capturePage({onProgress:session.onProgress});
+  assert.deepEqual(result.images,[]);
+  assert.deepEqual(result.warnings.map(warning => warning.code),['image_unreadable']);
+  assert.match(result.warnings[0].label,/图表块 diagram/u);
+  const converted = convertCapture(result);
+  assert.deepEqual(converted.warnings.map(warning => warning.code),['image_unreadable','missing_image']);
+  assert.equal(session.scroller.scrollTop,session.originalTop);
+});
+
+test('diagram 从原生视图采集完整高清 PNG，转换后只输出一张图片', async t => {
+  const session = virtualDiagram(t,{native:true});
+  const result = await capturePage({onProgress:session.onProgress});
+  assert.equal(result.images.length,1);
+  assert.equal(result.images[0].blockId,'diagram');
+  assert.equal(result.images[0].mime,'image/png');
+  assert.equal(result.images[0].dataUrl,pngDataUrl);
+  assert.ok(result.images[0].width > 200);
+  assert.deepEqual(result.warnings,[]);
+  const converted = convertCapture(result);
+  assert.equal((converted.html.match(/<img\b/gu) || []).length,1);
+  assert.deepEqual(converted.warnings,[]);
+  assert.equal(session.scroller.scrollTop,session.originalTop);
+});
+
+test('diagram 初次未就绪在定点补采恢复后不保留失败提示', async t => {
+  const session = virtualDiagram(t,{native:true});
+  const original = session.view.getSvg;
+  let readable = false;
+  session.view.getSvg = scale => readable ? original(scale) : null;
+  const result = await capturePage({onProgress(progress) {
+    session.onProgress(progress); if (progress.stage === 'audit') readable=true;
+  }});
+  assert.equal(result.images.length,1);
+  assert.deepEqual(result.warnings,[]);
+  assert.equal(session.scroller.scrollTop,session.originalTop);
+});
+
+test('diagram 内容在采集后变化会更新已有素材，不重复加入图片', async t => {
+  const session = virtualDiagram(t,{native:true});
+  const doc = globalThis.document, create = doc.createElement;
+  let changed = false;
+  doc.createElement = tag => {
+    const output = create(tag);
+    if (tag === 'canvas') {
+      const marker = changed ? 'updated' : 'original';
+      output.toDataURL = () => 'data:image/png;base64,' + btoa(marker);
+    }
+    return output;
+  };
+  const result = await capturePage({onProgress(progress) {
+    session.onProgress(progress);
+    if (progress.stage === 'audit') {
+      changed=true;
+      session.block.outerHTML = session.block.outerHTML.replace('M0 0h1','M0 0h2');
+    }
+  }});
+  assert.equal(result.images.length,1);
+  assert.equal(atob(result.images[0].dataUrl.split(',')[1]),'updated');
+  assert.deepEqual(result.warnings,[]);
+});
+
+for (const type of ['table','synced_reference']) {
+  test(type + ' 内只有 diagram 时以完整素材确认就绪，补采恢复后无遗留提示', async t => {
+    const session = virtualDiagram(t,{native:true});
+    const doc = globalThis.document;
+    const originalOne = doc.querySelector, originalAll = doc.querySelectorAll;
+    const cell = {
+      get outerHTML() {return '<td>' + session.block.outerHTML + '</td>';},textContent:'',
+      getAttribute:() => null,querySelectorAll:() => [session.block],
+      getBoundingClientRect:session.block.getBoundingClientRect,
+    };
+    const row = {cells:[cell],parentElement:{localName:'tbody'},getAttribute:() => null,cloneNode:() => ({outerHTML:'<tr></tr>'})};
+    const container = {
+      parentElement:session.block.parentElement,textContent:'',
+      get outerHTML() {
+        const content = type === 'table' ? '<table><tbody><tr>' + cell.outerHTML + '</tr></tbody></table>' : session.block.outerHTML;
+        return '<div data-block-id="container" data-block-type="' + type + '">' + content + '</div>';
+      },
+      getAttribute:name => ({'data-block-id':'container','data-block-type':type})[name] ?? null,
+      getBoundingClientRect:() => ({top:90-session.scroller.scrollTop,bottom:190-session.scroller.scrollTop,height:100}),
+      querySelector:selector => selector === 'table' && type === 'table' ? {rows:[row]} : null,
+      querySelectorAll:() => [session.block],scrollIntoView() {session.scroller.scrollTop=90;},
+    };
+    session.block.parentElement = {closest:() => container};
+    doc.querySelector = selector => selector === '[data-block-id="container"]' ? container : originalOne(selector);
+    doc.querySelectorAll = selector => selector === '[data-block-id]' ? [originalOne('.page-block'),container,session.block] : originalAll(selector);
+    const getSvg = session.view.getSvg;
+    let readable = false;
+    session.view.getSvg = scale => readable ? getSvg(scale) : null;
+    const result = await capturePage({onProgress(progress) {
+      session.onProgress(progress);if (progress.stage === 'audit') readable=true;
+    }});
+    assert.equal(result.images.length,1);
+    assert.deepEqual(result.blocks.map(block => block.type),[type]);
+    assert.deepEqual(result.warnings,[]);
+    const converted = convertCapture(result);
+    assert.match(converted.html,/<img src="images\/diagram\.png"/u);
+    assert.deepEqual(converted.warnings,[]);
+    assert.equal(session.scroller.scrollTop,session.originalTop);
+  });
+}
+
+test('diagram 解码期间取消会停止采集并恢复阅读位置', async t => {
+  const session = virtualDiagram(t,{native:true});
+  let cancelled = false;
+  session.setDecodeHook(() => {cancelled=true;return Promise.resolve();});
+  await assert.rejects(capturePage({onProgress:session.onProgress,shouldStop:() => cancelled}),{name:'AbortError'});
+  assert.equal(session.scroller.scrollTop,session.originalTop);
+  assert.equal(session.operations.filter(operation => operation.name === 'draw').length,0);
 });
 
 test('白板内容层迟挂载时有界等待并采集最终节点', async t => {

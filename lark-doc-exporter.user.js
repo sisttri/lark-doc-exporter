@@ -840,7 +840,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
               (node.children || []).forEach(visit);
             }
             snapshot.blocks.forEach(visit);
-            const images = {}, names = /* @__PURE__ */ new Map(), dimensions = /* @__PURE__ */ new Map(), slices = /* @__PURE__ */ new Map();
+            const images = {}, names = /* @__PURE__ */ new Map(), dimensions2 = /* @__PURE__ */ new Map(), slices = /* @__PURE__ */ new Map();
             let pixels = 0, bytes = 0, renderedBytes = 0, skipped = 0, staticImages = 0;
             for (const asset of snapshot.assets) {
               if (asset.role !== "image" || !referenced.has(asset.path)) continue;
@@ -883,7 +883,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
                 renderedBytes += assetBytes;
                 Object.assign(images, Object.fromEntries(entries));
                 names.set(asset.path, parts[0].id);
-                dimensions.set(asset.path, { width, height });
+                dimensions2.set(asset.path, { width, height });
                 if (parts.length > 1) slices.set(asset.path, parts);
                 if (asset.type === "image/gif" || asset.type === "image/webp") staticImages++;
               } catch (error) {
@@ -893,7 +893,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
                 bitmap?.close();
               }
             }
-            return { images, names, dimensions, slices, skipped, staticImages };
+            return { images, names, dimensions: dimensions2, slices, skipped, staticImages };
           }
           function tableRows(table) {
             const rows = [];
@@ -9974,6 +9974,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
     "code",
     "image",
     "whiteboard",
+    "diagram",
     "quote",
     "callout",
     "quote_container",
@@ -10060,7 +10061,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
       return cleanText(explicit || (annotation ? textContent(annotation) : "") || (title ? textContent(title) : "") || (node.tagName === "math" ? textContent(node) : "")).replace(/\s+/gu, " ").trim().slice(0, 2048);
     }
     function visit(node) {
-      if (["whiteboard", "file"].includes(nodeAttr(node, "data-block-type"))) return;
+      if (["whiteboard", "diagram", "file"].includes(nodeAttr(node, "data-block-type"))) return;
       for (let index = 0; index < (node.childNodes || []).length; index++) {
         const child = node.childNodes[index];
         if (!child.tagName || isHidden(child)) continue;
@@ -10428,7 +10429,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
     }
     function renderImage(info) {
       const image = imageByBlock.get(info.id);
-      const label = info.type === "whiteboard" ? "白板块 " : "图片块 ";
+      const label = info.type === "whiteboard" ? "白板块 " : info.type === "diagram" ? "图表块 " : "图片块 ";
       if (!image) {
         addWarning("missing_image", label + info.id + " 缺少素材");
         return null;
@@ -10439,6 +10440,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
       }
       let alt = sanitizeImageAlt(image.alt);
       if (!alt && info.type === "whiteboard") alt = "白板静态预览（当前画面）";
+      if (!alt && info.type === "diagram") alt = "图表";
       if (!alt) {
         const element = findFirstElement(info.element, (node) => node.tagName === "img");
         alt = sanitizeImageAlt(element ? nodeAttr(element, "alt") : "");
@@ -10480,6 +10482,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
         case "code":
           return renderCode(info);
         case "image":
+        case "diagram":
         case "whiteboard":
           return renderImage(info);
         case "file":
@@ -10593,6 +10596,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
         case "code":
           return renderCode(info);
         case "image":
+        case "diagram":
         case "whiteboard":
           return renderImage(info);
         case "file":
@@ -10629,7 +10633,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
         addWarning("unsupported_block", "块 " + (id || "(无 id)") + " 无法解析");
         continue;
       }
-      if (!["whiteboard", "file"].includes(type)) normalizeRichContent(element, id, addWarning);
+      if (!["whiteboard", "diagram", "file"].includes(type)) normalizeRichContent(element, id, addWarning);
       infos.push({ id, type, element });
     }
     const rawTitle = cleanText(capture.source?.title ?? "").replace(/\s+/gu, " ").trim();
@@ -12649,6 +12653,159 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
     throw new Error("未读到唯一、可见且加载稳定的图片");
   }
 
+  // src/userscript/diagram.js
+  var SVG = "http://www.w3.org/2000/svg";
+  var XHTML = "http://www.w3.org/1999/xhtml";
+  var svgTags = /* @__PURE__ */ new Set([
+    "svg",
+    "g",
+    "defs",
+    "path",
+    "rect",
+    "circle",
+    "ellipse",
+    "line",
+    "polyline",
+    "polygon",
+    "text",
+    "tspan",
+    "title",
+    "desc",
+    "clipPath",
+    "linearGradient",
+    "radialGradient",
+    "stop",
+    "foreignObject"
+  ]);
+  var htmlTags = /* @__PURE__ */ new Set(["div", "span", "strong", "b", "br", "i", "em", "p"]);
+  function findDiagram(root, id, recordId) {
+    const pending = [root], seen = /* @__PURE__ */ new Set();
+    while (pending.length && seen.size < 2e4) {
+      const model = pending.pop();
+      if (!model || typeof model !== "object" || seen.has(model)) continue;
+      seen.add(model);
+      if (String(model.id) === id && model.type === "diagram" && model.record?.id === recordId) return model;
+      if (Array.isArray(model.children)) pending.push(...model.children);
+      const children = model.innerBlockManager?.rootBlockModel?.children;
+      if (Array.isArray(children)) pending.push(...children);
+    }
+    return null;
+  }
+  function dimensions(svg) {
+    if (svg?.namespaceURI !== SVG || svg.localName !== "svg") return null;
+    const size = (name) => {
+      const value = svg.getAttribute(name);
+      return typeof value === "string" && /^\d+(?:\.\d+)?(?:px)?$/u.test(value) ? Number.parseFloat(value) : NaN;
+    };
+    const width = size("width"), height = size("height");
+    const box = svg.getAttribute("viewBox")?.trim().split(/[\s,]+/u).map(Number);
+    if (!Number.isFinite(width * height) || width < 1 || height < 1 || !box || box.length !== 4 || !box.every(Number.isFinite) || box[2] <= 0 || box[3] <= 0) return null;
+    return { width, height };
+  }
+  function staticSource(svg, serializer) {
+    const pending = [{ node: svg, html: false, depth: 0 }];
+    let count = 0;
+    while (pending.length) {
+      const { node, html, depth } = pending.pop();
+      if (++count > 2e4 || depth > 128) return null;
+      if (node.nodeType === 3 || node.nodeType === 4 || node.nodeType === 8) continue;
+      if (node.nodeType !== 1 || node.namespaceURI !== (html ? XHTML : SVG) || !(html ? htmlTags : svgTags).has(node.localName)) return null;
+      for (const attribute of node.attributes) {
+        const name = attribute.name.toLowerCase(), value = attribute.value;
+        if (name === "xmlns" || name.startsWith("xmlns:")) {
+          if (![SVG, XHTML, "http://www.w3.org/1999/xlink"].includes(value)) return null;
+        } else if (attribute.namespaceURI && attribute.namespaceURI !== "http://www.w3.org/XML/1998/namespace") return null;
+        if (name.startsWith("on") || /(?:^|:)(?:href|src)$/u.test(name) || /[\\\u0000-\u001f]|(?:url|image(?:-set)?|cross-fade|element|paint)\s*\(|@import|expression\s*\(|javascript\s*:|(?:animation|transition|behavior|binding)\s*:/iu.test(value)) return null;
+      }
+      for (const child of node.childNodes) pending.push({ node: child, html: html || node.localName === "foreignObject", depth: depth + 1 });
+    }
+    const source = serializer.serializeToString(svg);
+    return typeof source === "string" && source.length <= 2 * 1024 * 1024 ? source : null;
+  }
+  async function decode(image, checkStop) {
+    let timer;
+    try {
+      const deadline = Date.now() + 8e3;
+      await Promise.race([image.decode(), new Promise((resolve, reject) => {
+        const tick = () => {
+          try {
+            checkStop();
+            if (Date.now() >= deadline) throw new Error("流程图解码超时");
+            timer = setTimeout(tick, 100);
+          } catch (error) {
+            reject(error);
+          }
+        };
+        timer = setTimeout(tick, 100);
+      })]);
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+  async function captureDiagram(document2, id, { pageView = typeof unsafeWindow === "undefined" ? globalThis : unsafeWindow, checkStop = () => {
+  } } = {}) {
+    let canvas, image;
+    try {
+      checkStop();
+      const key = String(id);
+      if (!/^[\w-]{1,160}$/u.test(key)) return null;
+      const page = document2?.querySelector('[data-block-type="page"]');
+      const block = document2?.querySelector('[data-block-id="' + key + '"]');
+      const pageId = page?.getAttribute("data-record-id"), recordId = block?.getAttribute("data-record-id");
+      const root = pageView?.PageMain?.blockManager?.rootBlockModel;
+      if (!pageId || !recordId || !root || root.record?.id !== pageId || block.isConnected === false || block.getAttribute("data-block-type") !== "diagram" || !page.contains(block)) return null;
+      const model = findDiagram(root, key, recordId);
+      const view = model?.blockManager?.getBlockViewByBlockId?.(model.id);
+      if (typeof view?.getSvg !== "function") return null;
+      const belongsToPage = () => pageView?.PageMain?.blockManager?.rootBlockModel === root && root.record?.id === pageId && document2.querySelector('[data-block-type="page"]') === page && page.getAttribute("data-record-id") === pageId && document2.querySelector('[data-block-id="' + key + '"]') === block && block.isConnected !== false && block.getAttribute("data-record-id") === recordId && page.contains(block) && findDiagram(root, key, recordId) === model && model.blockManager?.getBlockViewByBlockId?.(model.id) === view;
+      const browser = document2.defaultView || globalThis, serializer = new browser.XMLSerializer();
+      const base = view.getSvg(), size = dimensions(base), original = staticSource(base, serializer);
+      if (!size || !original || !belongsToPage()) return null;
+      const scale = Math.min(4, 8192 / size.width, 8192 / size.height, Math.sqrt(159e5 / (size.width * size.height)));
+      if (!Number.isFinite(scale) || scale <= 0) return null;
+      const svg = view.getSvg(scale), output = dimensions(svg), source = staticSource(svg, serializer);
+      if (!output || !source) return null;
+      const width = Math.ceil(output.width), height = Math.ceil(output.height);
+      if (width > 8192 || height > 8192 || width * height > 16e6) return null;
+      checkStop();
+      image = new browser.Image();
+      image.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(source);
+      await decode(image, checkStop);
+      checkStop();
+      if (!belongsToPage() || staticSource(view.getSvg(), serializer) !== original) return null;
+      canvas = document2.createElement("canvas");
+      canvas.width = width;
+      canvas.height = height;
+      const context = canvas.getContext("2d");
+      if (!context) return null;
+      context.fillStyle = "#ffffff";
+      context.fillRect(0, 0, width, height);
+      context.drawImage(image, 0, 0, width, height);
+      checkStop();
+      const dataUrl2 = canvas.toDataURL("image/png");
+      if (typeof dataUrl2 !== "string" || dataUrl2.length > 32 * 1024 * 1024 + 64 || !/^data:image\/png;base64,[A-Za-z0-9+/]+={0,2}$/u.test(dataUrl2) || !belongsToPage() || staticSource(view.getSvg(), serializer) !== original) return null;
+      return { blockId: id, mime: "image/png", width, height, alt: "流程图", dataUrl: dataUrl2 };
+    } catch (error) {
+      if (error?.name === "AbortError") throw error;
+      return null;
+    } finally {
+      try {
+        image?.removeAttribute("src");
+      } catch {
+      }
+      if (canvas) {
+        try {
+          canvas.width = 0;
+        } catch {
+        }
+        try {
+          canvas.height = 0;
+        } catch {
+        }
+      }
+    }
+  }
+
   // src/userscript/table.js
   function rgba(value) {
     const opaque2 = normalizeColor(value);
@@ -13001,6 +13158,8 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
               const canvas = findWhiteboardCanvas(el);
               parts.push(canvas ? [canvas.width, canvas.height] : null);
               if (!isWhiteboardReady(el)) ready = false;
+            } else if (type === "diagram") {
+              parts.push(el.outerHTML);
             } else if (!text && type !== "divider" && !/\bisEmpty\b/u.test(el.outerHTML)) ready = false;
           }
         }
@@ -13044,6 +13203,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
               const type = part.getAttribute("data-block-type");
               if (type === "image") return Boolean(part.querySelector("img"));
               if (type === "whiteboard") return isWhiteboardReady(part);
+              if (type === "diagram") return images.some((image) => image.blockId === part.getAttribute("data-block-id"));
               if (type === "code") return Boolean(part.querySelector(CODE_ROW));
               if (type === "divider") return true;
               if (type === "text" || type === "bullet" || type === "ordered" || type === "todo" || type.startsWith("heading")) {
@@ -13118,6 +13278,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
           observedImages.set(id, state);
         }
         const stored = blocks.get(id), html = el.outerHTML;
+        if (type === "diagram" && stored?.observedHtml !== html) pendingImages.add(id);
         if (stored?.observedHtml === html) return null;
         if (stored) stored.observedHtml = html;
         const score = scoreOf(el);
@@ -13202,7 +13363,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
             const cells = tables.get(block.id)?.cells;
             content = cells ? JSON.stringify([...cells].map(([key, cell]) => [key, cell.ready, cell.semantic?.fingerprint])) : "";
             if (cells?.size) ready = true;
-          } else if (!CONTAINER_TYPES.has(block.type) && block.semantic?.text.trim() || ["image", "whiteboard"].includes(block.type) && images.some((image) => image.blockId === block.id) || block.type === "whiteboard" && isWhiteboardReady(document.querySelector('[data-block-id="' + block.id + '"]')) || /\bisEmpty\b/u.test(block.html)) ready = true;
+          } else if (!CONTAINER_TYPES.has(block.type) && block.semantic?.text.trim() || ["image", "whiteboard", "diagram"].includes(block.type) && images.some((image) => image.blockId === block.id) || block.type === "whiteboard" && isWhiteboardReady(document.querySelector('[data-block-id="' + block.id + '"]')) || /\bisEmpty\b/u.test(block.html)) ready = true;
           descendants.push([block.id, block.parentId, block.type, content]);
         }
         return { signature: JSON.stringify(descendants), ready };
@@ -13263,6 +13424,24 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
       const tables = /* @__PURE__ */ new Map();
       const tableStyles = createTableStyleCapture();
       async function captureImage(id) {
+        if (blocks.get(id)?.type === "diagram") {
+          try {
+            const image = await captureDiagram(document, id, {
+              pageView: typeof unsafeWindow === "undefined" ? globalThis : unsafeWindow,
+              checkStop
+            });
+            if (!image) throw new Error("未能读取完整图表，请等待图表加载完成后重试");
+            const index = images.findIndex((saved) => saved.blockId === id);
+            if (index < 0) images.push(image);
+            else images[index] = image;
+            diagramErrors.delete(id);
+            return true;
+          } catch (error) {
+            if (error.name === "AbortError") throw error;
+            diagramErrors.set(id, String(error.message || error).slice(0, 120));
+            return false;
+          }
+        }
         if (blocks.get(id)?.type === "whiteboard") {
           try {
             images.push(await captureWhiteboardPreview(id, { wait, checkStop }));
@@ -13296,6 +13475,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
       const images = [];
       const failedImages = /* @__PURE__ */ new Set();
       const whiteboardErrors = /* @__PURE__ */ new Map();
+      const diagramErrors = /* @__PURE__ */ new Map();
       const imageStates = /* @__PURE__ */ new Map(), observedImages = /* @__PURE__ */ new Map(), pendingImages = /* @__PURE__ */ new Set(), imageErrors = /* @__PURE__ */ new Map();
       async function collectImages(snap) {
         for (const block of snap.fresh) {
@@ -13423,6 +13603,10 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
       refreshRoots();
       report({ stage: "audit", message: "核对表格、图片与代码完整性…" });
       await collectAtCurrentPosition();
+      for (const id of failedImages) {
+        if (blocks.get(id)?.type !== "diagram") continue;
+        if (await revealBlock(id, positions.get(id)) && await captureImage(id)) failedImages.delete(id);
+      }
       async function auditReference(reference) {
         checkStop();
         referenceRegions++;
@@ -13460,6 +13644,8 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
                 if (!image?.complete || !image.naturalWidth) continue;
               } else if (block.type === "whiteboard") {
                 if (!isWhiteboardReady(el)) continue;
+              } else if (block.type === "diagram") {
+                if (!images.some((image) => image.blockId === block.id)) continue;
               } else if (!cleanText3(content.textContent) && !/\bisEmpty\b/u.test(content.outerHTML)) continue;
               parts.push([block.id, content.textContent]);
             }
@@ -13602,6 +13788,9 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
       for (const [id, reason] of imageErrors) warnings2.push({ code: "image_unreadable", label: "图片块 " + id + "：" + reason });
       for (const [id, reason] of whiteboardErrors) {
         warnings2.push({ code: "image_unreadable", label: "白板块 " + id + "：" + reason });
+      }
+      for (const [id, reason] of diagramErrors) {
+        warnings2.push({ code: "image_unreadable", label: "图表块 " + id + "：" + reason });
       }
       async function sampleWindow(id, y, reached) {
         checkStop();
@@ -13779,6 +13968,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
         "table",
         "image",
         "whiteboard",
+        "diagram",
         "quote",
         "quote_container",
         "synced_reference",
