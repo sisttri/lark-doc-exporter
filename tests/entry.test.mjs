@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { unzipSync } from 'fflate';
 import { installPageExporter } from '../src/userscript/entry.js';
+import { pngDataUrl } from './helpers/whiteboard.mjs';
 
 class Element {
   children = [];
@@ -39,8 +40,9 @@ class Element {
   *walk() { yield this; for (const node of this.children) yield* node.walk(); }
 }
 
-function harness({captureHook, captureImages = [], onYield, pdfHook, pdfNotes = [], warnings = [], initialFormats, initialPosition} = {}) {
+function harness({captureHook, captureImages = [], captureData = {}, onYield, pdfHook, pdfNotes = [], warnings = [], initialFormats, initialPosition} = {}) {
   let captures = 0, pdfs = 0, domToken, menu;
+  let downloadBlock = '';
   let ready = true, unsupported = false, reason = '';
   const delayed = new Map(), intervals = [];
   let timerId = 0;
@@ -58,7 +60,13 @@ function harness({captureHook, captureImages = [], onYield, pdfHook, pdfNotes = 
       querySelector:selector => selector.includes('page-block') || selector.includes('data-block-type="page"') ? root : byId(selector.replace(/^#/, '')),
       createElement(tag) {
         const element = new Element(tag);
-        if (tag === 'a') element.click = () => downloads.push({name:element.download, blob:blobs.get(element.href)});
+        if (tag === 'a') element.click = () => {
+          if (downloadBlock === 'undelivered') return;
+          const event = {target:element,defaultPrevented:false,preventDefault() { this.defaultPrevented = true; }};
+          element.listeners.get('click')?.(event);
+          if (downloadBlock === 'preventDefault') event.preventDefault();
+          if (!event.defaultPrevented) downloads.push({name:element.download, blob:blobs.get(element.href)});
+        };
         return element;
       },
       addEventListener:(type, listener) => events.set('document:' + type, listener),
@@ -72,7 +80,7 @@ function harness({captureHook, captureImages = [], onYield, pdfHook, pdfNotes = 
     clearTimeout(id) { delayed.delete(id); clearTimeout(id); },
     setInterval(fn) { intervals.push(fn); return intervals.length; },
     clearInterval() {},
-    URL: {createObjectURL(blob) { const id = 'test:' + blobs.size; blobs.set(id, blob); return id; }, revokeObjectURL() {}},
+    URL: {createObjectURL(blob) { const id = 'test:' + blobs.size; blobs.set(id, blob); return id; }, revokeObjectURL(id) { blobs.delete(id); }},
     localStorage:{getItem:key => stored.get(key), setItem:(key,value) => stored.set(key,value)},
   };
   const source = () => {
@@ -90,7 +98,7 @@ function harness({captureHook, captureImages = [], onYield, pdfHook, pdfNotes = 
       await captureHook?.(options);
       return {source:atStart,
         blocks:[{id:'p',type:'text',html:'<div class="zone-container"><div class="ace-line">正文</div></div>'}],
-        code:{}, images:captureImages, warnings};
+        code:{}, images:captureImages, warnings, ...captureData};
     },
     renderPdf:async (snapshot, options) => {
       pdfs++;
@@ -118,6 +126,7 @@ function harness({captureHook, captureImages = [], onYield, pdfHook, pdfNotes = 
   };
   return {
     get, select, navigate, downloads, stored, menu:() => menu,
+    blockDownloads(mode) { downloadBlock = mode; },
     open:() => { if (!get('popover').hidden) get('close').click(); get('launcher').click(); },
     reuse:async () => { get('supplement').click(); await get('button').click(); },
     fire:(key,type,event={}) => get(key).listeners.get(type)?.({target:get(key),...event}),
@@ -223,6 +232,124 @@ test('每次完整保存采集最新内容，显式补存与再次下载复用�
   ui.open(); ui.select('html');
   await ui.get('button').click();
   assert.equal(ui.captures(), 2);
+});
+
+test('被页面取消或未送达的下载显示失败，重新下载复用已生成文件', async () => {
+  for (const mode of ['preventDefault', 'undelivered']) {
+    const ui = harness();
+    ui.blockDownloads(mode); ui.open(); ui.select('html');
+    await ui.get('button').click();
+    assert.equal(ui.downloads.length, 0);
+    assert.match(ui.get('status').textContent, /保存失败.*(?:取消|阻止).*下载/u);
+    assert.doesNotMatch(ui.get('status').textContent, /已交给浏览器/u);
+    assert.equal(ui.get('redownload').hidden, false);
+    assert.equal(ui.get('retry').hidden, false);
+    ui.autoClose(); assert.equal(ui.get('card').hidden, false);
+    ui.blockDownloads(''); ui.get(mode === 'preventDefault' ? 'retry' : 'redownload').click();
+    assert.equal(ui.downloads.length, 1);
+    assert.equal(ui.captures(), 1);
+    assert.match(ui.get('status').textContent, /已交给浏览器/u);
+    assert.equal(ui.get('retry').hidden, true);
+  }
+});
+
+test('重新下载和下载提示被取消时显示失败，不丢失原文件或重复采集', async () => {
+  const ui = harness({warnings:[{code:'code_lines_missing',label:'第 3 行缺失'}]});
+  ui.open(); ui.select('html'); await ui.get('button').click();
+  const original = ui.downloads[0].blob;
+  ui.blockDownloads('preventDefault');
+  assert.doesNotThrow(() => ui.get('redownload').click());
+  assert.match(ui.get('status').textContent, /保存失败.*下载/u);
+  assert.doesNotThrow(() => ui.get('report').click());
+  assert.match(ui.get('status').textContent, /保存失败.*下载/u);
+  assert.equal(ui.downloads.length, 1);
+  ui.blockDownloads(''); ui.get('retry').click();
+  assert.equal(ui.downloads.at(-1).blob, original);
+  assert.match(ui.get('status').textContent, /部分保存.*已交给浏览器/u);
+  assert.equal(ui.captures(), 1);
+  ui.get('report').click();
+  assert.match(ui.downloads.at(-1).name, /保存提示\.txt$/u);
+  assert.match(await ui.downloads.at(-1).blob.text(), /第 3 行缺失/u);
+  assert.equal(ui.get('status').textContent, '提示文件已交给浏览器保存。');
+});
+
+test('提示报告成功不会覆盖正文尚未交付的失败状态，重试仍复用正文文件', async () => {
+  const ui = harness({warnings:[{code:'code_lines_missing',label:'第 3 行缺失'}]});
+  ui.blockDownloads('preventDefault'); ui.open(); ui.select('html'); await ui.get('button').click();
+  assert.equal(ui.downloads.length, 0);
+  ui.blockDownloads(''); ui.get('report').click();
+  assert.match(ui.downloads[0].name, /保存提示\.txt$/u);
+  assert.match(ui.get('status').textContent, /提示文件已交给浏览器.*文档文件尚未交给浏览器/u);
+  assert.equal(ui.get('retry').hidden, false);
+  ui.get('retry').click();
+  assert.equal(ui.downloads[1].name, '文档A.html');
+  assert.match(ui.get('status').textContent, /部分保存.*已交给浏览器/u);
+  assert.equal(ui.get('retry').hidden, true);
+  assert.equal(ui.captures(), 1);
+});
+
+test('入口保留 PNG、JPEG、GIF、WebP 原编码和原字节到 HTML 与 Markdown 素材', async () => {
+  const jpeg = '/9j/4AAQSkZJRgABAQAASABIAAD/4QBMRXhpZgAATU0AKgAAAAgAAYdpAAQAAAABAAAAGgAAAAAAA6ABAAMAAAABAAEAAKACAAQAAAABAAAAAaADAAQAAAABAAAAAQAAAAD/7QA4UGhvdG9zaG9wIDMuMAA4QklNBAQAAAAAAAA4QklNBCUAAAAAABDUHYzZjwCyBOmACZjs+EJ+/8AAEQgAAQABAwEiAAIRAQMRAf/EAB8AAAEFAQEBAQEBAAAAAAAAAAABAgMEBQYHCAkKC//EALUQAAIBAwMCBAMFBQQEAAABfQECAwAEEQUSITFBBhNRYQcicRQygZGhCCNCscEVUtHwJDNicoIJChYXGBkaJSYnKCkqNDU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6g4SFhoeIiYqSk5SVlpeYmZqio6Slpqeoqaqys7S1tre4ubrCw8TFxsfIycrS09TV1tfY2drh4uPk5ebn6Onq8fLz9PX29/j5+v/EAB8BAAMBAQEBAQEBAQEAAAAAAAABAgMEBQYHCAkKC//EALURAAIBAgQEAwQHBQQEAAECdwABAgMRBAUhMQYSQVEHYXETIjKBCBRCkaGxwQkjM1LwFWJy0QoWJDThJfEXGBkaJicoKSo1Njc4OTpDREVGR0hJSlNUVVZXWFlaY2RlZmdoaWpzdHV2d3h5eoKDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uLj5OXm5+jp6vLz9PX29/j5+v/bAEMAAgICAgICAwICAwUDAwMFBgUFBQUGCAYGBgYGCAoICAgICAgKCgoKCgoKCgwMDAwMDA4ODg4ODw8PDw8PDw8PD//bAEMBAgICBAQEBwQEBxALCQsQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEP/dAAQAAf/aAAwDAQACEQMRAD8A+Y6KKK/n8/2AP//Z';
+  const images = [
+    {blockId:'png',mime:'image/png',extension:'png',dataUrl:pngDataUrl},
+    {blockId:'jpeg',mime:'image/jpeg',extension:'jpg',dataUrl:'data:image/jpeg;base64,' + jpeg},
+    {blockId:'gif',mime:'image/gif',extension:'gif',dataUrl:'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw=='},
+    {blockId:'webp',mime:'image/webp',extension:'webp',dataUrl:'data:image/webp;base64,UklGRiIAAABXRUJQVlA4IBYAAAAwAQCdASoBAAEADsD+JaQAA3AAAAAA'},
+  ];
+  const blocks = images.map(({blockId:id}) => ({id,type:'image',html:'<div data-block-id="'+id+'" data-block-type="image"><img></div>'}));
+  const ui = harness({captureImages:images,captureData:{blocks}});
+  ui.open(); ui.select('markdown','html'); await ui.get('button').click();
+  assert.equal(ui.downloads.length, 1);
+  const files = unzipSync(new Uint8Array(await ui.downloads[0].blob.arrayBuffer()));
+  const html = new TextDecoder().decode(files['文档A.html']);
+  for (const image of images) {
+    const path = 'images/' + image.blockId + '.' + image.extension;
+    assert.deepEqual(files[path], new Uint8Array(Buffer.from(image.dataUrl.split(',')[1], 'base64')));
+    assert.ok(html.includes(image.dataUrl));
+  }
+  assert.doesNotMatch(ui.panelText(), /图片缺失|图片无效/u);
+  ui.open(); ui.select('html'); await ui.reuse();
+  const standalone = await ui.downloads.at(-1).blob.text();
+  for (const image of images) assert.ok(standalone.includes(image.dataUrl));
+});
+
+test('入口将 SVG 原图及嵌套 PNG 回退传给 PDF 快照，归档只保存 SVG 主素材', async () => {
+  const source = '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="10" viewBox="0 0 20 10"><text x="1" y="8">Vector</text></svg>';
+  const image = {blockId:'vector',mime:'image/svg+xml',dataUrl:'data:image/svg+xml;base64,'+Buffer.from(source).toString('base64'),
+    rasterFallback:{mime:'image/png',dataUrl:pngDataUrl}};
+  let saved;
+  const ui = harness({captureImages:[image],captureData:{blocks:[{id:'vector',type:'diagram',html:'<div data-block-type="diagram"></div>'}]},
+    pdfHook:snapshot => { saved = snapshot; }});
+  ui.open(); ui.select('markdown','html','pdf'); await ui.get('button').click();
+  assert.equal(ui.downloads.length, 1);
+  assert.equal(saved.assets[0]?.type, 'image/svg+xml');
+  assert.deepEqual(saved.assets[0].rasterFallback, {type:'image/png',bytes:new Uint8Array(Buffer.from(pngDataUrl.split(',')[1],'base64'))});
+  const files = unzipSync(new Uint8Array(await ui.downloads[0].blob.arrayBuffer()));
+  assert.match(new TextDecoder().decode(files['images/vector.svg']), />Vector<\/text>/u);
+  assert.ok(!Object.keys(files).some(path => path.endsWith('.png')));
+  assert.deepEqual(saved.warnings, []);
+});
+
+test('入口将附件原件与语义源码共同交付所有格式', async () => {
+  const bytes = new TextEncoder().encode('public attachment\n第二行');
+  let saved;
+  const ui = harness({captureData:{
+    blocks:[{id:'file',type:'file',html:'<div data-block-type="file">公开附件.txt</div>'},
+      {id:'equation',type:'text',html:'<div data-block-id="equation" data-record-id="record-equation" data-block-type="text"><div class="ace-line">旧文本</div></div>'}],
+    attachments:[{blockId:'file',name:'公开附件.txt',mime:'text/plain',bytes}],
+    semantic:{version:1,recordId:'A',blocks:[{id:'equation',recordId:'record-equation',type:'text',ready:true,
+      ops:[{insert:'\ufffc',attributes:{equation:'x^2'}}]}]},
+  },pdfHook:snapshot => { saved = snapshot; }});
+  ui.open(); ui.select('markdown','html','attachments','pdf'); await ui.get('button').click();
+  assert.equal(ui.downloads.length, 1);
+  const files = unzipSync(new Uint8Array(await ui.downloads[0].blob.arrayBuffer()));
+  assert.deepEqual(files['attachments/file-公开附件.txt'], bytes);
+  const html = new TextDecoder().decode(files['文档A.html']);
+  assert.match(html, /href="data:application\/octet-stream;base64,/u);
+  assert.match(decodeURI(new TextDecoder().decode(files['文档A.md'])), /attachments\/file-公开附件\.txt/u);
+  assert.match(html, /data-export-equation="x\^2"/u);
+  assert.deepEqual(saved.assets.find(asset => asset.role === 'attachment')?.bytes, bytes);
+  assert.deepEqual(saved.warnings, []);
 });
 
 test('PDF 单选直接下载 PDF，多格式只下载一个包含 PDF 的 ZIP 且清单吻合', async () => {

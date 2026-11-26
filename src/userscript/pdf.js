@@ -1,3 +1,5 @@
+import {validFontCoverage} from '../pdf-emoji.js';
+
 function cancelled() {
   return new DOMException('保存已取消', 'AbortError');
 }
@@ -24,13 +26,14 @@ async function readCachedPdfResources(hashes, shouldStop) {
   }
   let fontArchive;
   try { fontArchive = JSON.parse(resources.pdfFonts); } catch { throw invalidResource(); }
-  const names = ['Regular.woff2', 'Bold.woff2'];
+  const names = ['Regular.woff2', 'Bold.woff2', 'Emoji.ttf', 'Symbols.ttf'];
   if (!Array.isArray(fontArchive) || fontArchive.length !== names.length ||
       names.some(name => fontArchive.filter(font => font?.name === name).length !== 1) ||
       fontArchive.some(font => !Number.isSafeInteger(font.size) || font.size <= 0 ||
         !Number.isSafeInteger(font.compressedSize) || font.compressedSize <= 0 ||
         typeof font.compressed !== 'string' || font.compressed.length !== Math.ceil(font.compressedSize / 4) * 5 ||
-        !/^[a-f0-9]{64}$/.test(font.hash))) throw invalidResource();
+        !/^[a-f0-9]{64}$/.test(font.hash) ||
+        (font.name === 'Emoji.ttf' || font.name === 'Symbols.ttf') && !validFontCoverage(font.coverage))) throw invalidResource();
   return {engineSource:resources.pdfEngine, fontArchive};
 }
 

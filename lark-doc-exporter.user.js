@@ -18,7 +18,7 @@
 // @updateURL    https://raw.githubusercontent.com/sisttri/lark-doc-exporter/main/lark-doc-exporter.user.js
 // @downloadURL  https://raw.githubusercontent.com/sisttri/lark-doc-exporter/main/lark-doc-exporter.user.js
 // @resource     pdfEngine https://raw.githubusercontent.com/sisttri/lark-doc-exporter/26c22708c7b5a952611c185fa2c151d60bde83ce/release-assets/pdf-engine-0.3.15.js#sha256=34561e07851000e186ab22e1cb8e38b84e54f2de618946de4053f692c8d2003b
-// @resource     pdfFonts https://raw.githubusercontent.com/sisttri/lark-doc-exporter/26c22708c7b5a952611c185fa2c151d60bde83ce/release-assets/pdf-fonts-v1.json#sha256=76df3504ffe8e93e530e75807ef7cc48ecf844c584e3d7224f19b6c2e35d1a3c
+// @resource     pdfFonts https://raw.githubusercontent.com/sisttri/lark-doc-exporter/f7efc9fc376629070277b21d2ac391c6d02e3b82/release-assets/pdf-fonts-v1.json#sha256=7304c9cd921c4c749670ff8e98a849650257175d25349c3d1d3132e32e241461
 // ==/UserScript==
 /* global globalThis:readonly */
 // Readable bundled libraries for local HTML parsing, ZIP output and isolated Worker decompression:
@@ -576,6 +576,104 @@ OTHER DEALINGS IN THE SOFTWARE.
 
 */
 /*
+licenses/Noto-Emoji-OFL.txt
+
+Copyright 2013 Google LLC
+
+This Font Software is licensed under the SIL Open Font License, Version 1.1.
+This license is copied below, and is also available with a FAQ at:
+https://scripts.sil.org/OFL
+
+
+-----------------------------------------------------------
+SIL OPEN FONT LICENSE Version 1.1 - 26 February 2007
+-----------------------------------------------------------
+
+PREAMBLE
+The goals of the Open Font License (OFL) are to stimulate worldwide
+development of collaborative font projects, to support the font creation
+efforts of academic and linguistic communities, and to provide a free and
+open framework in which fonts may be shared and improved in partnership
+with others.
+
+The OFL allows the licensed fonts to be used, studied, modified and
+redistributed freely as long as they are not sold by themselves. The
+fonts, including any derivative works, can be bundled, embedded,
+redistributed and/or sold with any software provided that any reserved
+names are not used by derivative works. The fonts and derivatives,
+however, cannot be released under any other type of license. The
+requirement for fonts to remain under this license does not apply
+to any document created using the fonts or their derivatives.
+
+DEFINITIONS
+"Font Software" refers to the set of files released by the Copyright
+Holder(s) under this license and clearly marked as such. This may
+include source files, build scripts and documentation.
+
+"Reserved Font Name" refers to any names specified as such after the
+copyright statement(s).
+
+"Original Version" refers to the collection of Font Software components as
+distributed by the Copyright Holder(s).
+
+"Modified Version" refers to any derivative made by adding to, deleting,
+or substituting -- in part or in whole -- any of the components of the
+Original Version, by changing formats or by porting the Font Software to a
+new environment.
+
+"Author" refers to any designer, engineer, programmer, technical
+writer or other person who contributed to the Font Software.
+
+PERMISSION & CONDITIONS
+Permission is hereby granted, free of charge, to any person obtaining
+a copy of the Font Software, to use, study, copy, merge, embed, modify,
+redistribute, and sell modified and unmodified copies of the Font
+Software, subject to the following conditions:
+
+1) Neither the Font Software nor any of its individual components,
+in Original or Modified Versions, may be sold by itself.
+
+2) Original or Modified Versions of the Font Software may be bundled,
+redistributed and/or sold with any software, provided that each copy
+contains the above copyright notice and this license. These can be
+included either as stand-alone text files, human-readable headers or
+in the appropriate machine-readable metadata fields within text or
+binary files as long as those fields can be easily viewed by the user.
+
+3) No Modified Version of the Font Software may use the Reserved Font
+Name(s) unless explicit written permission is granted by the corresponding
+Copyright Holder. This restriction only applies to the primary font name as
+presented to the users.
+
+4) The name(s) of the Copyright Holder(s) or the Author(s) of the Font
+Software shall not be used to promote, endorse or advertise any
+Modified Version, except to acknowledge the contribution(s) of the
+Copyright Holder(s) and the Author(s) or with their explicit written
+permission.
+
+5) The Font Software, modified or unmodified, in part or in whole,
+must be distributed entirely under this license, and must not be
+distributed under any other license. The requirement for fonts to
+remain under this license does not apply to any document created
+using the Font Software.
+
+TERMINATION
+This license becomes null and void if any of the above conditions are
+not met.
+
+DISCLAIMER
+THE FONT SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO ANY WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT
+OF COPYRIGHT, PATENT, TRADEMARK, OR OTHER RIGHT. IN NO EVENT SHALL THE
+COPYRIGHT HOLDER BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
+INCLUDING ANY GENERAL, SPECIAL, INDIRECT, INCIDENTAL, OR CONSEQUENTIAL
+DAMAGES, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+FROM, OUT OF THE USE OR INABILITY TO USE THE FONT SOFTWARE OR FROM
+OTHER DEALINGS IN THE FONT SOFTWARE.
+
+*/
+/*
 licenses/Noto-OFL.txt
 
 Noto Sans CJK SC Regular and Bold
@@ -675,6 +773,104 @@ FROM, OUT OF THE USE OR INABILITY TO USE THE FONT SOFTWARE OR FROM
 OTHER DEALINGS IN THE FONT SOFTWARE.
 
 */
+/*
+licenses/Noto-Symbols-OFL.txt
+
+Copyright 2022 The Noto Project Authors (https://github.com/notofonts/symbols)
+
+This Font Software is licensed under the SIL Open Font License, Version 1.1.
+This license is copied below, and is also available with a FAQ at:
+https://scripts.sil.org/OFL
+
+
+-----------------------------------------------------------
+SIL OPEN FONT LICENSE Version 1.1 - 26 February 2007
+-----------------------------------------------------------
+
+PREAMBLE
+The goals of the Open Font License (OFL) are to stimulate worldwide
+development of collaborative font projects, to support the font creation
+efforts of academic and linguistic communities, and to provide a free and
+open framework in which fonts may be shared and improved in partnership
+with others.
+
+The OFL allows the licensed fonts to be used, studied, modified and
+redistributed freely as long as they are not sold by themselves. The
+fonts, including any derivative works, can be bundled, embedded,
+redistributed and/or sold with any software provided that any reserved
+names are not used by derivative works. The fonts and derivatives,
+however, cannot be released under any other type of license. The
+requirement for fonts to remain under this license does not apply
+to any document created using the fonts or their derivatives.
+
+DEFINITIONS
+"Font Software" refers to the set of files released by the Copyright
+Holder(s) under this license and clearly marked as such. This may
+include source files, build scripts and documentation.
+
+"Reserved Font Name" refers to any names specified as such after the
+copyright statement(s).
+
+"Original Version" refers to the collection of Font Software components as
+distributed by the Copyright Holder(s).
+
+"Modified Version" refers to any derivative made by adding to, deleting,
+or substituting -- in part or in whole -- any of the components of the
+Original Version, by changing formats or by porting the Font Software to a
+new environment.
+
+"Author" refers to any designer, engineer, programmer, technical
+writer or other person who contributed to the Font Software.
+
+PERMISSION & CONDITIONS
+Permission is hereby granted, free of charge, to any person obtaining
+a copy of the Font Software, to use, study, copy, merge, embed, modify,
+redistribute, and sell modified and unmodified copies of the Font
+Software, subject to the following conditions:
+
+1) Neither the Font Software nor any of its individual components,
+in Original or Modified Versions, may be sold by itself.
+
+2) Original or Modified Versions of the Font Software may be bundled,
+redistributed and/or sold with any software, provided that each copy
+contains the above copyright notice and this license. These can be
+included either as stand-alone text files, human-readable headers or
+in the appropriate machine-readable metadata fields within text or
+binary files as long as those fields can be easily viewed by the user.
+
+3) No Modified Version of the Font Software may use the Reserved Font
+Name(s) unless explicit written permission is granted by the corresponding
+Copyright Holder. This restriction only applies to the primary font name as
+presented to the users.
+
+4) The name(s) of the Copyright Holder(s) or the Author(s) of the Font
+Software shall not be used to promote, endorse or advertise any
+Modified Version, except to acknowledge the contribution(s) of the
+Copyright Holder(s) and the Author(s) or with their explicit written
+permission.
+
+5) The Font Software, modified or unmodified, in part or in whole,
+must be distributed entirely under this license, and must not be
+distributed under any other license. The requirement for fonts to
+remain under this license does not apply to any document created
+using the Font Software.
+
+TERMINATION
+This license becomes null and void if any of the above conditions are
+not met.
+
+DISCLAIMER
+THE FONT SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO ANY WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT
+OF COPYRIGHT, PATENT, TRADEMARK, OR OTHER RIGHT. IN NO EVENT SHALL THE
+COPYRIGHT HOLDER BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
+INCLUDING ANY GENERAL, SPECIAL, INDIRECT, INCIDENTAL, OR CONSEQUENTIAL
+DAMAGES, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+FROM, OUT OF THE USE OR INABILITY TO USE THE FONT SOFTWARE OR FROM
+OTHER DEALINGS IN THE FONT SOFTWARE.
+
+*/
 
 (() => {
   var __defProp = Object.defineProperty;
@@ -688,6 +884,21 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
       }
   };
 
+  // src/pdf-emoji.js
+  function validFontCoverage(ranges) {
+    if (!Array.isArray(ranges) || !ranges.length || ranges.length > 1e4) return false;
+    let previous = -1;
+    for (const range of ranges) {
+      if (!Array.isArray(range) || range.length !== 2 || !Number.isSafeInteger(range[0]) || !Number.isSafeInteger(range[1]) || range[0] < 0 || range[0] <= previous || range[0] > range[1] || range[1] > 1114111) return false;
+      previous = range[1];
+    }
+    return true;
+  }
+  var init_pdf_emoji = __esm({
+    "src/pdf-emoji.js"() {
+    }
+  });
+
   // cached-pdf:assets
   var assets_exports = {};
   __export(assets_exports, {
@@ -697,7 +908,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
   var resourceHashes, workerSource;
   var init_assets = __esm({
     "cached-pdf:assets"() {
-      resourceHashes = { "pdfEngine": "34561e07851000e186ab22e1cb8e38b84e54f2de618946de4053f692c8d2003b", "pdfFonts": "76df3504ffe8e93e530e75807ef7cc48ecf844c584e3d7224f19b6c2e35d1a3c" };
+      resourceHashes = { "pdfEngine": "34561e07851000e186ab22e1cb8e38b84e54f2de618946de4053f692c8d2003b", "pdfFonts": "7304c9cd921c4c749670ff8e98a849650257175d25349c3d1d3132e32e241461" };
       workerSource = "(" + function pdfWorkerBootstrap() {
         (() => {
           function safeStem2(name) {
@@ -724,6 +935,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
             table_cell_unconfirmed: "未能确认表格单元格内容",
             table_structure_unconfirmed: "未能确认表格结构",
             capture_content_changed: "采集期间内容发生变化，请重新保存核对",
+            source_fallback: "已从本页源结构补全正文",
             pdf_conversion_note: "PDF 转换提示"
           };
           function warningLabel2(code) {
@@ -781,6 +993,59 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
               }
             }
             return widths;
+          }
+          var emojiCharacter = /[\p{Extended_Pictographic}\p{Regional_Indicator}\p{Emoji_Presentation}]/u;
+          var possibleFallback = /[\p{Extended_Pictographic}\p{Regional_Indicator}\p{Emoji_Presentation}\u20e3\u2610-\u2612]/u;
+          var checkbox = /^[\u2610-\u2612]/u;
+          var textSymbol = /^[©®™]/u;
+          var keycap = /^[#*0-9]\ufe0f?\u20e3$/u;
+          var segmenter;
+          function splitEmojiRuns(text) {
+            if (!text) return [];
+            if (!possibleFallback.test(text)) return [{ text }];
+            segmenter ??= new Intl.Segmenter(void 0, { granularity: "grapheme" });
+            const runs = [];
+            for (const { segment } of segmenter.segment(text)) {
+              let font;
+              if (checkbox.test(segment)) font = "NotoSymbols";
+              else if ((emojiCharacter.test(segment) || keycap.test(segment)) && (!textSymbol.test(segment) || segment.includes("️"))) font = "NotoEmoji";
+              const previous = runs.at(-1);
+              if (previous && previous.font === font) previous.text += segment;
+              else runs.push(font ? { text: segment, font } : { text: segment });
+            }
+            return runs;
+          }
+          function validFontCoverage2(ranges) {
+            if (!Array.isArray(ranges) || !ranges.length || ranges.length > 1e4) return false;
+            let previous = -1;
+            for (const range of ranges) {
+              if (!Array.isArray(range) || range.length !== 2 || !Number.isSafeInteger(range[0]) || !Number.isSafeInteger(range[1]) || range[0] < 0 || range[0] <= previous || range[0] > range[1] || range[1] > 1114111) return false;
+              previous = range[1];
+            }
+            return true;
+          }
+          function covered(codepoint, ranges) {
+            let low = 0, high = ranges.length - 1;
+            while (low <= high) {
+              const middle = Math.floor((low + high) / 2), [start, end] = ranges[middle];
+              if (codepoint < start) high = middle - 1;
+              else if (codepoint > end) low = middle + 1;
+              else return true;
+            }
+            return false;
+          }
+          function missingEmojiGlyphs(text, coverage) {
+            const runs = splitEmojiRuns(text).filter((run) => run.font);
+            if (!runs.length) return [];
+            const missing = /* @__PURE__ */ new Set();
+            for (const { text: text2, font } of runs) {
+              const ranges = coverage?.[font];
+              if (!validFontCoverage2(ranges)) throw Object.assign(new Error("PDF 字体覆盖范围无效。"), { code: "PDF_FONT_INVALID" });
+              for (const { segment } of segmenter.segment(text2)) {
+                if ([...segment].some((character) => !new RegExp("\\p{Default_Ignorable_Code_Point}", "u").test(character) && !covered(character.codePointAt(0), ranges))) missing.add(segment);
+              }
+            }
+            return [...missing];
           }
           var INLINE = /* @__PURE__ */ new Set(["a", "span", "strong", "b", "em", "i", "s", "del", "strike", "small", "u", "code", "mark", "sub", "sup", "br"]);
           var SECTIONS = /* @__PURE__ */ new Set(["thead", "tbody", "tfoot"]);
@@ -844,11 +1109,16 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
             let pixels = 0, bytes = 0, renderedBytes = 0, skipped = 0, staticImages = 0;
             for (const asset of snapshot.assets) {
               if (asset.role !== "image" || !referenced.has(asset.path)) continue;
-              bytes += asset.bytes.length;
+              const raster = asset.type === "image/svg+xml" ? asset.rasterFallback : asset;
+              bytes += asset.bytes.length + (asset.type === "image/svg+xml" ? raster?.bytes.length || 0 : 0);
               if (bytes > 24 * MiB2 || referenced.size > 110) limit();
+              if (!raster || asset.type === "image/svg+xml" && raster.type !== "image/png") {
+                skipped++;
+                continue;
+              }
               let bitmap;
               try {
-                bitmap = await createImageBitmap(new Blob([asset.bytes], { type: asset.type }));
+                bitmap = await createImageBitmap(new Blob([raster.bytes], { type: raster.type }));
                 pixels += bitmap.width * bitmap.height;
                 if (pixels > 28e6) limit();
                 const { width, height } = bitmap;
@@ -859,9 +1129,9 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
                 for (let top = 0; top < height; top += sliceHeight) {
                   const partHeight = Math.min(sliceHeight, height - top);
                   let preparedBytes, type = "image/png";
-                  if (height <= sliceHeight && (asset.type === "image/jpeg" || asset.type === "image/png" && staticPng(asset.bytes))) {
-                    preparedBytes = asset.bytes;
-                    type = asset.type;
+                  if (height <= sliceHeight && (raster.type === "image/jpeg" || raster.type === "image/png" && staticPng(raster.bytes))) {
+                    preparedBytes = raster.bytes;
+                    type = raster.type;
                   } else {
                     const canvas = new OffscreenCanvas(width, partHeight);
                     try {
@@ -885,7 +1155,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
                 names.set(asset.path, parts[0].id);
                 dimensions2.set(asset.path, { width, height });
                 if (parts.length > 1) slices.set(asset.path, parts);
-                if (asset.type === "image/gif" || asset.type === "image/webp") staticImages++;
+                if (raster.type === "image/gif" || raster.type === "image/webp") staticImages++;
               } catch (error) {
                 if (error.code === "PDF_LIMIT") throw error;
                 skipped++;
@@ -967,8 +1237,29 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
           }
           function pdfDefinition(snapshot, prepared = { images: {}, names: /* @__PURE__ */ new Map() }) {
             checkedSize(snapshot);
-            let denseTables = 0;
-            const textLine = (str, add = {}) => ({ text: boundLongTokens(str), ...add });
+            let denseTables = 0, equations = 0;
+            const missingGlyphs = /* @__PURE__ */ new Set();
+            function auditGlyphs(text) {
+              if (prepared.fontCoverage) {
+                for (const glyph of missingEmojiGlyphs(text, prepared.fontCoverage)) {
+                  missingGlyphs.add(glyph);
+                }
+              }
+            }
+            function textLine(str, add = {}) {
+              auditGlyphs(str);
+              const runs = splitEmojiRuns(str);
+              if (!runs.some((run) => run.font)) return { text: boundLongTokens(str), ...add };
+              return { text: runs.map((run) => run.font ? run : { text: boundLongTokens(run.text) }), ...add };
+            }
+            function codeLine(source, add = {}) {
+              const runs = source.match(/[\x00-\x7f]+|[^\x00-\x7f]+/gu) || [];
+              return {
+                text: runs.map((text) => textLine(text, { font: /^[\x00-\x7f]+$/u.test(text) ? "Courier" : "Noto" })),
+                preserveLeadingSpaces: true,
+                ...add
+              };
+            }
             function sequence(nodes, availableWidth, fontSize, cellColor) {
               const out = [], buffer = [];
               function flush() {
@@ -980,6 +1271,15 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
                   return;
                 }
                 const tag = node.tag;
+                if (typeof node.equation === "string") {
+                  equations++;
+                  const source = codeLine(node.equation, style);
+                  if (node.display === "block") {
+                    flush();
+                    out.push({ ...source, margin: [0, 4, 0, 5] });
+                  } else buffer.push(source);
+                  return;
+                }
                 if (tag === "br") {
                   buffer.push(textLine("\n", style));
                   return;
@@ -1118,14 +1418,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
               }
               if (tag === "hr") return { canvas: [{ type: "line", x1: 0, y1: 0, x2: Math.min(200, availableWidth), y2: 0, lineWidth: 0.5, lineColor: "#9bafa4" }], margin: [0, 6, 0, 6] };
               if (tag === "pre") {
-                const runs = plain(node).match(/[\x00-\x7f]+|[^\x00-\x7f]+/gu) || [];
-                return {
-                  text: runs.map((text) => textLine(text, { font: /^[\x00-\x7f]+$/u.test(text) ? "Courier" : "Noto" })),
-                  preserveLeadingSpaces: true,
-                  fontSize: 9,
-                  margin: [Math.min(6, availableWidth - MIN_COLUMN_WIDTH), 4, 0, 5],
-                  color: cellColor ?? "#314d40"
-                };
+                return codeLine(plain(node), { fontSize: 9, margin: [Math.min(6, availableWidth - MIN_COLUMN_WIDTH), 4, 0, 5], color: cellColor ?? "#314d40" });
               }
               if (tag === "blockquote") {
                 const indent = Math.min(14, availableWidth - MIN_COLUMN_WIDTH);
@@ -1140,14 +1433,20 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
             }
             const hasTitle = snapshot.blocks.some(matchesTitle);
             if (!hasTitle) content.unshift(textLine(snapshot.title, { bold: true, fontSize: 22, margin: [0, 0, 0, 9] }));
-            const notes = [];
-            if (prepared.skipped) notes.push(prepared.skipped + " 幅图片已用文字说明");
-            if (prepared.staticImages) notes.push(prepared.staticImages + " 幅图片以静态画面排版");
-            if (denseTables) notes.push(denseTables + " 个宽表已按行展开");
             const notices = new Map((snapshot.warnings || []).map(({ code, label }) => [
               label || warningLabel2(code),
               warningLabel2(code) + (label ? " · " + label : "")
             ]));
+            for (const notice of notices.values()) auditGlyphs(notice);
+            const notes = [];
+            if (prepared.skipped) notes.push(prepared.skipped + " 幅图片已用文字说明");
+            if (prepared.staticImages) notes.push(prepared.staticImages + " 幅图片以静态画面排版");
+            if (denseTables) notes.push(denseTables + " 个宽表已按行展开");
+            if (equations) notes.push(equations + " 处公式已保留为 LaTeX 源码，未进行数学排版");
+            if (missingGlyphs.size) {
+              const codepoints = [...missingGlyphs].map((glyph) => [...glyph].map((character) => "U+" + character.codePointAt(0).toString(16).toUpperCase().padStart(4, "0")).join(" "));
+              notes.push("PDF 字体未覆盖的表情或符号：" + codepoints.join("；") + "。原字符已保留，可能显示为空框。");
+            }
             for (const note of notes) if (!notices.has(note)) notices.set(note, note);
             if (prepared.slices?.size) {
               const note = prepared.slices.size + " 幅长图已按原分辨率连续分段排版";
@@ -1156,7 +1455,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
             if (notices.size) {
               content.push(
                 { text: "保存提示", bold: true, fontSize: 12, margin: [0, 10, 0, 5] },
-                { ul: [...notices.values()], fontSize: 9, color: "#715522" }
+                { ul: [...notices.values()].map((notice) => textLine(notice)), fontSize: 9, color: "#715522" }
               );
             }
             return { denseTables, notes, doc: {
@@ -1554,16 +1853,16 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
           /* eslint-enable curly, no-redeclare, no-return-assign, no-sequences -- @preserve End upstream fflate. */
           var Z85 = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ.-:+=^!/*?&<>()[]{}@%$#";
           function decodeZ85(encoded, size) {
-            if (typeof encoded !== "string" || !Number.isSafeInteger(size) || size < 0 || encoded.length !== Math.ceil(size / 4) * 5) throw invalid();
+            if (typeof encoded !== "string" || !Number.isSafeInteger(size) || size < 0 || encoded.length !== Math.ceil(size / 4) * 5) throw invalid2();
             const bytes = new Uint8Array(Math.ceil(size / 4) * 4);
             for (let offset = 0; offset < encoded.length; offset += 5) {
               let value = 0;
               for (let index = 0; index < 5; index++) {
                 const digit = Z85.indexOf(encoded[offset + index]);
-                if (digit < 0) throw invalid();
+                if (digit < 0) throw invalid2();
                 value = value * 85 + digit;
               }
-              if (value > 4294967295) throw invalid();
+              if (value > 4294967295) throw invalid2();
               const target = offset / 5 * 4;
               for (let index = 3; index >= 0; index--) {
                 bytes[target + index] = value % 256;
@@ -1572,7 +1871,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
             }
             return bytes.subarray(0, size);
           }
-          function invalid() {
+          function invalid2() {
             return Object.assign(new Error("PDF 字体校验失败，请重新安装脚本。"), { code: "PDF_FONT_INVALID" });
           }
           async function readEmbeddedFont({ compressed, compressedSize, size, hash }) {
@@ -1580,12 +1879,12 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
             try {
               bytes = gunzipSync(decodeZ85(compressed, compressedSize));
             } catch {
-              throw invalid();
+              throw invalid2();
             }
-            if (bytes.length !== size) throw invalid();
+            if (bytes.length !== size) throw invalid2();
             const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", bytes));
             const actual = Array.from(digest, (byte) => byte.toString(16).padStart(2, "0")).join("");
-            if (actual !== hash) throw invalid();
+            if (actual !== hash) throw invalid2();
             return bytes;
           }
           self.onmessage = async ({ data }) => {
@@ -1596,9 +1895,17 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
               const fonts = {};
               for (const font of data.fontArchive) fonts[font.name] = { data: await readEmbeddedFont(font) };
               pdfMake.addVirtualFileSystem(fonts);
-              pdfMake.addFonts({ Noto: { normal: "Regular.woff2", bold: "Bold.woff2", italics: "Regular.woff2", bolditalics: "Bold.woff2" } });
+              pdfMake.addFonts({
+                Noto: { normal: "Regular.woff2", bold: "Bold.woff2", italics: "Regular.woff2", bolditalics: "Bold.woff2" },
+                NotoEmoji: { normal: "Emoji.ttf", bold: "Emoji.ttf", italics: "Emoji.ttf", bolditalics: "Emoji.ttf" },
+                NotoSymbols: { normal: "Symbols.ttf", bold: "Symbols.ttf", italics: "Symbols.ttf", bolditalics: "Symbols.ttf" }
+              });
               postMessage({ stage: "排版图片与正文" });
               const prepared = await prepareImages(data.snapshot);
+              prepared.fontCoverage = {
+                NotoEmoji: data.fontArchive.find((font) => font.name === "Emoji.ttf").coverage,
+                NotoSymbols: data.fontArchive.find((font) => font.name === "Symbols.ttf").coverage
+              };
               const { doc, notes } = pdfDefinition(data.snapshot, prepared);
               postMessage({ stage: "生成 PDF" });
               const bytes = await pdfMake.createPdf(doc).getBuffer();
@@ -1653,8 +1960,8 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
     } catch {
       throw invalidResource();
     }
-    const names = ["Regular.woff2", "Bold.woff2"];
-    if (!Array.isArray(fontArchive) || fontArchive.length !== names.length || names.some((name) => fontArchive.filter((font) => font?.name === name).length !== 1) || fontArchive.some((font) => !Number.isSafeInteger(font.size) || font.size <= 0 || !Number.isSafeInteger(font.compressedSize) || font.compressedSize <= 0 || typeof font.compressed !== "string" || font.compressed.length !== Math.ceil(font.compressedSize / 4) * 5 || !/^[a-f0-9]{64}$/.test(font.hash))) throw invalidResource();
+    const names = ["Regular.woff2", "Bold.woff2", "Emoji.ttf", "Symbols.ttf"];
+    if (!Array.isArray(fontArchive) || fontArchive.length !== names.length || names.some((name) => fontArchive.filter((font) => font?.name === name).length !== 1) || fontArchive.some((font) => !Number.isSafeInteger(font.size) || font.size <= 0 || !Number.isSafeInteger(font.compressedSize) || font.compressedSize <= 0 || typeof font.compressed !== "string" || font.compressed.length !== Math.ceil(font.compressedSize / 4) * 5 || !/^[a-f0-9]{64}$/.test(font.hash) || (font.name === "Emoji.ttf" || font.name === "Symbols.ttf") && !validFontCoverage(font.coverage))) throw invalidResource();
     return { engineSource: resources.pdfEngine, fontArchive };
   }
   async function renderPdf(snapshot, { shouldStop = () => false, onProgress } = {}) {
@@ -1715,6 +2022,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
   }
   var init_pdf = __esm({
     "src/userscript/pdf.js"() {
+      init_pdf_emoji();
     }
   });
 
@@ -9761,6 +10069,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
     table_cell_unconfirmed: "未能确认表格单元格内容",
     table_structure_unconfirmed: "未能确认表格结构",
     capture_content_changed: "采集期间内容发生变化，请重新保存核对",
+    source_fallback: "已从本页源结构补全正文",
     pdf_conversion_note: "PDF 转换提示"
   };
   function warningLabel(code) {
@@ -9962,7 +10271,8 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
     "image/jpeg": "jpg",
     "image/jpg": "jpg",
     "image/gif": "gif",
-    "image/webp": "webp"
+    "image/webp": "webp",
+    "image/svg+xml": "svg"
   });
   var RASTER_EXTENSIONS = /* @__PURE__ */ new Set(["png", "jpg", "gif", "webp"]);
   var HEADING_TYPE = /^heading([1-6])$/u;
@@ -10168,6 +10478,10 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
     const tag = typeof node.tagName === "string" ? node.tagName : "";
     if (!tag) return renderInline(node.childNodes, suppressBold);
     if (isHiddenOrControl(node)) return "";
+    const equation = nodeAttr(node, "data-export-equation");
+    if (equation) {
+      return '<span data-export-equation="' + escapeText2(equation) + '" data-export-display="' + (nodeAttr(node, "data-export-display") === "block" ? "block" : "inline") + '">' + escapeText2(equation) + "</span>";
+    }
     if (tag === "br") return "<br>";
     if (tag === "img") {
       const alt = cleanText(nodeAttr(node, "alt")).trim();
@@ -10180,6 +10494,9 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
     }
     let wrapped = content;
     const wrappers = styleWrappers(nodeAttr(node, "style"), suppressBold);
+    const semanticTags = { b: "strong", strong: "strong", i: "em", em: "em", u: "u", s: "s", del: "s", strike: "s", code: "code", sup: "sup", sub: "sub" };
+    const semanticTag = Object.hasOwn(semanticTags, tag) ? semanticTags[tag] : null;
+    if (semanticTag && !(suppressBold && semanticTag === "strong") && !wrappers.includes(semanticTag)) wrappers.unshift(semanticTag);
     for (let index = wrappers.length - 1; index >= 0; index--) {
       wrapped = "<" + wrappers[index] + ">" + wrapped + "</" + wrappers[index] + ">";
     }
@@ -10264,9 +10581,9 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
     const result = [];
     for (const item of warnings2) {
       const label = typeof item.label === "string" ? item.label : "";
-      const key = item.code + "\0" + label;
-      if (seen.has(key)) continue;
-      seen.add(key);
+      const key2 = item.code + "\0" + label;
+      if (seen.has(key2)) continue;
+      seen.add(key2);
       result.push(label ? { code: item.code, label } : { code: item.code });
     }
     return result;
@@ -10281,6 +10598,28 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
       extension = RASTER_EXTENSIONS.has(candidate) ? candidate : "png";
     }
     return "images/" + blockId + "." + extension;
+  }
+  function attachmentHtmlPath(attachment) {
+    const rawId = String(attachment?.blockId ?? "file").normalize("NFC");
+    let id = rawId;
+    if (!/^[A-Za-z0-9_-]{1,64}$/u.test(id)) {
+      let hash = 2166136261;
+      for (const character of rawId) {
+        hash = Math.imul(hash ^ character.codePointAt(0), 16777619) >>> 0;
+      }
+      id = (rawId.replace(/[^A-Za-z0-9_-]/gu, "").slice(0, 48) || "file") + "-" + hash.toString(16).padStart(8, "0");
+    }
+    let name = String(attachment?.name ?? "附件").normalize("NFC").replace(/[\u0000-\u001f\u007f-\u009f\u2028-\u202e\u2066-\u2069<>:"/\\|?*]/gu, "_").replace(/^[. ]+|[. ]+$/gu, "") || "附件";
+    if (/^(?:con|prn|aux|nul|com[1-9¹²³]|lpt[1-9¹²³])(?:\.|$)/iu.test(name)) name = "_" + name;
+    const extension = /\.[^.]{1,32}$/u.exec(name)?.[0] || "";
+    const maximum = 160 - id.length - 1;
+    if (name.length > maximum) {
+      let stem = name.slice(0, maximum - extension.length);
+      if (/[\ud800-\udbff]$/u.test(stem)) stem = stem.slice(0, -1);
+      name = stem + extension;
+    }
+    name = name.replace(/[. ]+$/gu, "") || "附件";
+    return "attachments/" + id + "-" + name;
   }
   function convertCapture(capture) {
     if (!capture || typeof capture !== "object") throw new TypeError("capture 必须是对象。");
@@ -10298,6 +10637,99 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
     for (const image of Array.isArray(capture.images) ? capture.images : []) {
       if (image && image.blockId != null) imageByBlock.set(String(image.blockId), image);
     }
+    const attachmentByBlock = /* @__PURE__ */ new Map();
+    for (const attachment of Array.isArray(capture.attachments) ? capture.attachments : []) {
+      if (attachment?.blockId != null && attachment.bytes instanceof Uint8Array) attachmentByBlock.set(String(attachment.blockId), attachment);
+    }
+    const semanticByBlock = /* @__PURE__ */ new Map(), semanticOnly = /* @__PURE__ */ new Set();
+    const semantic = capture.semantic;
+    if (semantic?.version === 1 && Array.isArray(semantic.blocks)) {
+      if (capture.source?.docToken && semantic.recordId !== capture.source.docToken) {
+        addWarning("missing_block", "正文模型与采集页面不一致，未使用模型语义补充。");
+      } else {
+        warnings2.push(...normalizeWarnings(semantic.warnings));
+        for (const block of semantic.blocks) {
+          if (block && typeof block.id === "string" && typeof block.type === "string" && block.ready !== false) semanticByBlock.set(block.id, block);
+        }
+      }
+    }
+    function modelFor(info) {
+      const block = semanticByBlock.get(String(info.id));
+      const recordId = info.element ? nodeAttr(info.element, "data-record-id") : "";
+      return block?.type === info.type && (!recordId || !block.recordId || recordId === block.recordId) ? block : null;
+    }
+    function modelInline(model, force = false) {
+      const ops = Array.isArray(model?.ops) ? model.ops : [];
+      const special = ops.some((op) => typeof op?.attributes?.equation === "string" && op.attributes.equation || op?.attributes?.mention);
+      if (!special && !force) return null;
+      if (ops.some((op) => op?.attributes?.unresolvedInline === true)) {
+        addWarning("unsupported_block", "块 " + model.id + " 包含无法完整还原的内联组件，" + (force ? "已保留可读源码和占位。" : "保留页面正文，未使用模型整段替换。"));
+        if (!force) return null;
+      }
+      if (!ops.length) return typeof model?.text === "string" ? escapeText2(model.text).replace(/\r?\n/gu, "<br>") : null;
+      let html2 = "";
+      const enabled = (value) => value !== void 0 && value !== null && ![false, 0, "false", "0"].includes(value);
+      for (const op of ops) {
+        const attributes = op?.attributes || {};
+        if (attributes.fixEnter !== void 0) continue;
+        let piece;
+        if (typeof attributes.equation === "string" && attributes.equation) {
+          const latex = attributes.equation;
+          piece = '<span data-export-equation="' + escapeText2(latex) + '" data-export-display="' + (attributes.display === "block" ? "block" : "inline") + '">' + escapeText2(latex) + "</span>";
+        } else {
+          const mention = attributes.mention;
+          const insert = typeof op?.insert === "string" ? cleanText(op.insert).replace(/\ufffc/gu, attributes.unresolvedInline ? "[未转换的内联内容]" : "") : attributes.unresolvedInline ? "[未转换的内联内容]" : "";
+          const label = mention && typeof mention.title === "string" && mention.title ? mention.title : insert;
+          piece = escapeText2(label).replace(/\r?\n/gu, "<br>");
+          if (enabled(attributes.inlineCode)) piece = "<code>" + piece + "</code>";
+          for (const [name, tag] of [["bold", "strong"], ["italic", "em"], ["underline", "u"], ["strikethrough", "s"]]) {
+            if (enabled(attributes[name])) piece = "<" + tag + ">" + piece + "</" + tag + ">";
+          }
+          const href = safeHref(mention?.url || attributes.link);
+          if (href) piece = '<a href="' + escapeText2(href) + '">' + piece + "</a>";
+        }
+        html2 += piece;
+      }
+      return html2;
+    }
+    function applyModelInline(element, force = false) {
+      const id = nodeAttr(element, "data-block-id"), type = nodeAttr(element, "data-block-type");
+      if (nodeAttr(element, "data-export-semantic-only") === "1") semanticOnly.add(id);
+      const model = modelFor({ id, type, element });
+      const html2 = modelInline(model, force || nodeAttr(element, "data-export-semantic-only") === "1");
+      if (html2 !== null) {
+        let ownLines = function(node) {
+          for (const child of childElements(node)) {
+            if (isHiddenOrControl(child) || nodeAttr(child, "data-block-type")) continue;
+            if (hasClass(child, "ace-line")) lines.push(child);
+            else ownLines(child);
+          }
+        };
+        const lines = [];
+        ownLines(element);
+        if (lines.length) {
+          lines[0].childNodes = parseFragment(html2).childNodes;
+          for (const child of lines[0].childNodes) child.parentNode = lines[0];
+          for (const line of lines.slice(1)) line.childNodes = [];
+        } else if (["text", "bullet", "ordered", "todo", "quote", "callout"].includes(type) || HEADING_TYPE.test(type)) {
+          const line = parseFragment('<div class="ace-line">' + html2 + "</div>").childNodes[0];
+          line.parentNode = element;
+          element.childNodes.unshift(line);
+        }
+      }
+      for (const child of childElements(element)) {
+        if (isHiddenOrControl(child)) continue;
+        if (nodeAttr(child, "data-block-type")) applyModelInline(child);
+        else applyModelDescendants(child);
+      }
+    }
+    function applyModelDescendants(node) {
+      for (const child of childElements(node)) {
+        if (isHiddenOrControl(child)) continue;
+        if (nodeAttr(child, "data-block-type")) applyModelInline(child);
+        else applyModelDescendants(child);
+      }
+    }
     function listNumber(info) {
       function findOrder(node) {
         for (const child of childElements(node)) {
@@ -10311,7 +10743,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
         return null;
       }
       const order = findOrder(info.element);
-      const number = order ? Number.parseInt(textContent(order).trim(), 10) : Number.NaN;
+      const number = order ? Number.parseInt(textContent(order).trim(), 10) : semanticOnly.has(info.id) ? Number.parseInt(modelFor(info)?.seq, 10) : Number.NaN;
       return Number.isSafeInteger(number) ? number : null;
     }
     function renderSequence(infos2, cell = false) {
@@ -10412,11 +10844,16 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
     function renderTodo(info) {
       const content = renderLines(info.element);
       if (!content) return null;
-      return "<p>" + (detectChecked(info.element) ? "☑ " : "☐ ") + content + "</p>";
+      const checked = semanticOnly.has(info.id) ? modelFor(info)?.done === true : detectChecked(info.element);
+      return "<p>" + (checked ? "☑ " : "☐ ") + content + "</p>";
     }
     function renderCode(info) {
       const record = codeMap[info.id];
       const lines = Array.isArray(record?.lines) ? record.lines : [];
+      if (!lines.length && semanticOnly.has(info.id)) {
+        const model = modelFor(info);
+        if (typeof model?.text === "string" && model.text) return "<pre><code>" + escapeText2(model.text) + "</code></pre>";
+      }
       if (!lines.length) {
         const label = "代码块 " + info.id + " 缺少内容";
         addWarning("missing_code", label);
@@ -10483,10 +10920,16 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
         const element = findFirstElement(info.element, (node) => node.tagName === "img");
         alt = sanitizeImageAlt(element ? nodeAttr(element, "alt") : "");
       }
-      return '<img src="' + escapeText2(imageHtmlPath(image)) + '" alt="' + escapeText2(alt) + '">';
+      const html2 = '<img src="' + escapeText2(imageHtmlPath(image)) + '" alt="' + escapeText2(alt) + '">';
+      const caption = modelFor(info)?.caption;
+      return typeof caption === "string" && caption.trim() ? "<figure>" + html2 + "<figcaption>" + escapeText2(caption).replace(/\r?\n/gu, "<br>") + "</figcaption></figure>" : html2;
     }
     function renderFile2(info) {
       convertedContainers.add("file");
+      const attachment = attachmentByBlock.get(info.id);
+      if (attachment) {
+        return '<p><a href="' + escapeText2(attachmentHtmlPath(attachment)) + '" download="">' + escapeText2(typeof attachment.name === "string" && attachment.name ? attachment.name : "附件") + "</a></p>";
+      }
       function visibleText(node) {
         if (node.nodeName === "#text") return cleanText(node.value || "");
         if (isHiddenOrControl(node) || ["button", "toolbar", "menu", "menuitem"].includes(nodeAttr(node, "role"))) return "";
@@ -10510,6 +10953,24 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
       addWarning("missing_attachment", "附件块 " + info.id + " 原件未采集，仅保留文件名和可用链接");
       return "<p>" + (links.length ? links.join("、") : escapeText2(name)) + " [原件未采集]</p>";
     }
+    function renderSource(info) {
+      const model = modelFor(info), source = model?.source;
+      if (source?.language === "mermaid" && typeof source.text === "string" && source.text.trim()) {
+        convertedContainers.add("isv");
+        return '<pre><code class="language-mermaid">' + escapeText2(source.text) + "</code></pre>";
+      }
+      const items = model?.timeline;
+      if (Array.isArray(items) && items.length && items.every((item) => item && ["time", "title", "text"].every((name) => typeof item[name] === "string"))) {
+        convertedContainers.add("isv");
+        return "<ol>" + items.map((item) => {
+          const heading = [item.time, item.title].filter(Boolean).map((value) => escapeText2(value).replace(/\r?\n/gu, "<br>")).join(" · ");
+          const body2 = escapeText2(item.text).replace(/\r?\n/gu, "<br>");
+          return "<li>" + (heading ? "<p>" + heading + "</p>" : "") + (body2 ? "<p>" + body2 + "</p>" : "") + "</li>";
+        }).join("") + "</ol>";
+      }
+      addWarning("unsupported_block", "插件块 " + info.id + " 的源码格式未识别。");
+      return null;
+    }
     function renderCellBlock(info) {
       switch (info.type) {
         case "text":
@@ -10525,6 +10986,8 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
           return renderImage(info);
         case "file":
           return renderFile2(info);
+        case "isv":
+          return renderSource(info);
         case "quote":
         case "callout":
           return renderQuote(info, true);
@@ -10631,6 +11094,8 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
           return renderImage(info);
         case "file":
           return renderFile2(info);
+        case "isv":
+          return renderSource(info);
         case "table":
           return renderTable(info);
         case "quote":
@@ -10660,11 +11125,16 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
       }
       const type = typeof block.type === "string" ? block.type : "";
       const id = String(block.id ?? "");
-      const element = parseBlock(block.html);
+      const sourceOnly = block.semanticOnly === true;
+      if (sourceOnly) semanticOnly.add(id);
+      const element = parseBlock(block.html) || (sourceOnly && semanticByBlock.get(id)?.type === type ? parseBlock(
+        '<div data-block-id="' + escapeText2(id) + '" data-block-type="' + escapeText2(type) + '"><div class="ace-line"></div></div>'
+      ) : null);
       if (!element) {
         addWarning("unsupported_block", "块 " + (id || "(无 id)") + " 无法解析");
         continue;
       }
+      applyModelInline(element, sourceOnly);
       if (!["whiteboard", "diagram", "file"].includes(type)) normalizeRichContent(element, id, addWarning);
       infos.push({ id, type, element });
     }
@@ -10691,6 +11161,175 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
     return { title, html, warnings: allWarnings };
   }
 
+  // src/svg.js
+  var SVG = "http://www.w3.org/2000/svg";
+  var XHTML = "http://www.w3.org/1999/xhtml";
+  var XML = "http://www.w3.org/XML/1998/namespace";
+  var XMLNS = "http://www.w3.org/2000/xmlns/";
+  var XLINK = "http://www.w3.org/1999/xlink";
+  var MAX_BYTES = 2 * 1024 * 1024;
+  var MAX_NODES = 2e4;
+  var MAX_DEPTH = 96;
+  var MAX_EXPANDED = 6e4;
+  var svgTags = new Set("svg g defs symbol path rect circle ellipse line polyline polygon text tspan title desc clipPath mask linearGradient radialGradient stop marker use foreignObject".split(" "));
+  var htmlTags = new Set("div span strong b br i em p u s del sub sup small code pre blockquote ul ol li table caption thead tbody tfoot tr td th colgroup col h1 h2 h3 h4 h5 h6".split(" "));
+  var svgAttributes = new Set("id class x y x1 y1 x2 y2 cx cy r rx ry width height d points pathLength transform viewBox preserveAspectRatio fill fill-opacity fill-rule stroke stroke-width stroke-opacity stroke-linecap stroke-linejoin stroke-miterlimit stroke-dasharray stroke-dashoffset opacity paint-order vector-effect font-family font-size font-weight font-style font-variant letter-spacing word-spacing text-anchor dominant-baseline alignment-baseline baseline-shift dx dy textLength lengthAdjust clip-path clip-rule clipPathUnits mask maskUnits maskContentUnits gradientUnits gradientTransform spreadMethod offset stop-color stop-opacity marker-start marker-mid marker-end markerWidth markerHeight refX refY orient markerUnits overflow display visibility direction unicode-bidi style href aria-label role xml:space xml:lang".split(" "));
+  var htmlAttributes = new Set("id class style title dir lang width height colspan rowspan aria-label role xml:space xml:lang".split(" "));
+  var cssProperties = new Set("display overflow overflow-x overflow-y text-align vertical-align align-items align-content align-self justify-content flex flex-direction flex-wrap flex-grow flex-shrink flex-basis gap row-gap column-gap width height min-width min-height max-width max-height margin margin-top margin-right margin-bottom margin-left padding padding-top padding-right padding-bottom padding-left box-sizing font font-family font-size font-weight font-style font-variant font-stretch color background background-color line-height letter-spacing word-spacing white-space white-space-collapse text-wrap text-wrap-mode text-wrap-style word-break word-wrap overflow-wrap text-decoration text-decoration-line text-decoration-color text-decoration-style text-indent text-transform border border-width border-style border-color border-radius border-collapse border-spacing pointer-events opacity fill fill-opacity fill-rule stroke stroke-width stroke-opacity stroke-linecap stroke-linejoin stroke-dasharray stroke-dashoffset clip-path clip-rule mask transform transform-origin visibility".split(" "));
+  var functions = /* @__PURE__ */ new Set(["rgb", "rgba", "hsl", "hsla", "matrix", "translate", "translatex", "translatey", "scale", "scalex", "scaley", "rotate", "skewx", "skewy"]);
+  var numericAttributes = new Set("x y x1 y1 x2 y2 cx cy r rx ry width height d points pathLength transform viewBox dx dy textLength gradientTransform offset markerWidth markerHeight refX refY".split(" "));
+  var textAttributes = /* @__PURE__ */ new Set(["class", "title", "dir", "lang", "role", "aria-label", "xml:space", "xml:lang"]);
+  function invalid() {
+    throw new Error("Unsupported SVG");
+  }
+  function xml(value) {
+    return value.replace(/[&<>"\r]/gu, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "\r": "&#13;" })[char]);
+  }
+  function finiteNumbers(value) {
+    return [...value.replace(/#[0-9a-f]{3,8}\b/giu, "").matchAll(/[-+]?(?:\d*\.\d+|\d+\.?\d*)(?:e[-+]?\d+)?/giu)].every((match) => Number.isFinite(Number(match[0])) && Math.abs(Number(match[0])) <= 1e6);
+  }
+  function safeValue(value, refs) {
+    if (value.length > 65536 || /[\\\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]|\/\*|\*\/|@|(?:javascript|vbscript)\s*:/iu.test(value)) invalid();
+    const normalized = value.replace(/url\(\s*(['"]?)(#[A-Za-z0-9_.:-]{1,160})\1\s*\)/giu, (_, quote, id) => {
+      refs.push(id.slice(1));
+      return "url(" + id + ")";
+    });
+    const functionsOnly = normalized.replace(/url\(#[A-Za-z0-9_.:-]{1,160}\)/gu, "");
+    for (const match of functionsOnly.matchAll(/([-a-z][\w-]*)\s*\(/giu)) if (!functions.has(match[1].toLowerCase())) invalid();
+    return normalized;
+  }
+  function safeStyle(value, refs) {
+    if (value.length > 8192) invalid();
+    const declarations2 = [];
+    for (const part of value.split(";")) {
+      if (!part.trim()) continue;
+      const separator = part.indexOf(":");
+      if (separator < 1) invalid();
+      const property = part.slice(0, separator).trim().toLowerCase();
+      if (!cssProperties.has(property)) invalid();
+      const content = safeValue(part.slice(separator + 1).trim(), refs);
+      if (!content || !finiteNumbers(content)) invalid();
+      declarations2.push(property + ":" + content);
+    }
+    return declarations2.join(";");
+  }
+  function parsed(source) {
+    let nodes = 0, depth = 0;
+    const count = () => {
+      if (++nodes > MAX_NODES) invalid();
+    };
+    const adapter = { ...defaultTreeAdapter };
+    for (const method of ["createElement", "createCommentNode", "createDocumentFragment"]) {
+      adapter[method] = (...args) => {
+        count();
+        return defaultTreeAdapter[method](...args);
+      };
+    }
+    adapter.insertText = (parent, text) => {
+      if (parent.childNodes.at(-1)?.nodeName !== "#text") count();
+      defaultTreeAdapter.insertText(parent, text);
+    };
+    adapter.onItemPush = () => {
+      if (++depth > MAX_DEPTH) invalid();
+    };
+    adapter.onItemPop = () => {
+      depth--;
+    };
+    return parseFragment(source, { scriptingEnabled: false, treeAdapter: adapter });
+  }
+  function sanitizeSvg(source) {
+    try {
+      let serialize2 = function(node, html = false, depth = 0) {
+        if (++count > MAX_NODES || depth > MAX_DEPTH) invalid();
+        if (node.nodeName === "#comment") return "";
+        if (node.nodeName === "#text") return xml(node.value);
+        if (node.namespaceURI !== (html ? XHTML : SVG) || !(html ? htmlTags : svgTags).has(node.tagName)) invalid();
+        const refs = [], attrs = [];
+        references.set(node, refs);
+        for (const attribute of node.attrs || []) {
+          let name = attribute.prefix ? attribute.prefix + ":" + attribute.name : attribute.name;
+          const value = attribute.value;
+          if (name === "xmlns" || name.startsWith("xmlns:")) {
+            if (name === "xmlns" && value !== (html ? XHTML : SVG) || name === "xmlns:xlink" && value !== XLINK || !["xmlns", "xmlns:xlink"].includes(name) || attribute.namespace && attribute.namespace !== XMLNS) invalid();
+            continue;
+          }
+          if (attribute.namespace && ![XML, XLINK].includes(attribute.namespace)) invalid();
+          if (name === "xlink:href") name = "href";
+          if (!(html ? htmlAttributes : svgAttributes).has(name)) invalid();
+          let content2;
+          if (name === "href") {
+            if (!/^#[A-Za-z0-9_.:-]{1,160}$/u.test(value)) invalid();
+            refs.push(value.slice(1));
+            content2 = value;
+          } else if (textAttributes.has(name)) content2 = value;
+          else if (name === "style") content2 = safeStyle(value, refs);
+          else content2 = safeValue(value, refs);
+          if (name === "id") {
+            if (!/^[A-Za-z0-9_.:-]{1,160}$/u.test(content2) || ids.has(content2)) invalid();
+            ids.set(content2, node);
+          }
+          if (numericAttributes.has(name) && !finiteNumbers(content2)) invalid();
+          if (node === root && ["width", "height", "viewBox"].includes(name)) continue;
+          attrs.push(name + '="' + xml(content2) + '"');
+        }
+        if (node === root) attrs.unshift('xmlns="' + SVG + '"', 'width="' + width + '"', 'height="' + height + '"', 'viewBox="' + box.join(" ") + '"');
+        else if (html && node.parentNode?.namespaceURI === SVG) attrs.unshift('xmlns="' + XHTML + '"');
+        const descendants = (node.childNodes || []).filter((child) => child.nodeName !== "#comment");
+        children.set(node, descendants);
+        const content = descendants.map((child) => serialize2(child, html || node.tagName === "foreignObject", depth + 1)).join("");
+        if (html && ["br", "col"].includes(node.tagName)) return "<" + node.tagName + (attrs.length ? " " + attrs.join(" ") : "") + "/>";
+        return "<" + node.tagName + (attrs.length ? " " + attrs.join(" ") : "") + ">" + content + "</" + node.tagName + ">";
+      }, cost = function(node, depth = 0) {
+        if (depth > MAX_DEPTH || states.get(node) === 1) invalid();
+        if (costs.has(node)) {
+          const previous = costs.get(node);
+          if (depth + previous.depth > MAX_DEPTH) invalid();
+          return previous;
+        }
+        states.set(node, 1);
+        let nodes = 1, maxDepth = 0;
+        const linked = (references.get(node) || []).map((id) => {
+          if (!ids.has(id)) invalid();
+          return ids.get(id);
+        });
+        for (const child of [...children.get(node) || [], ...linked]) {
+          const result2 = cost(child, depth + 1);
+          nodes += result2.nodes;
+          maxDepth = Math.max(maxDepth, result2.depth + 1);
+          if (nodes > MAX_EXPANDED) invalid();
+        }
+        const result = { nodes, depth: maxDepth };
+        states.set(node, 2);
+        costs.set(node, result);
+        return result;
+      };
+      if (typeof source !== "string" || source.length > MAX_BYTES || new TextEncoder().encode(source).length > MAX_BYTES || /<!doctype|<!entity|<\?|[\u0000-\u0008\u000b\u000c\u000e-\u001f]/iu.test(source)) return null;
+      const fragment = parsed(source);
+      const roots = fragment.childNodes.filter((node) => node.nodeName !== "#comment" && !(node.nodeName === "#text" && !node.value.trim()));
+      if (roots.length !== 1 || roots[0].tagName !== "svg" || roots[0].namespaceURI !== SVG) return null;
+      const root = roots[0], ids = /* @__PURE__ */ new Map(), references = /* @__PURE__ */ new Map(), children = /* @__PURE__ */ new Map();
+      const attributes = new Map((root.attrs || []).map((item) => [item.name, item.value]));
+      const size = (name) => {
+        const value = attributes.get(name);
+        return typeof value === "string" && /^\d+(?:\.\d+)?(?:px)?$/u.test(value) ? Number.parseFloat(value) : NaN;
+      };
+      let width = size("width"), height = size("height");
+      const viewBox = attributes.get("viewBox")?.trim().split(/[\s,]+/u).map(Number);
+      const box = viewBox || [0, 0, width, height];
+      if (!attributes.has("width") && viewBox) width = box[2];
+      if (!attributes.has("height") && viewBox) height = box[3];
+      if (!Number.isFinite(width * height) || width < 1 || height < 1 || width > 1e5 || height > 1e5 || box.length !== 4 || !box.every((value) => Number.isFinite(value) && Math.abs(value) <= 1e6) || box[2] <= 0 || box[3] <= 0) return null;
+      let count = 0;
+      const normalized = serialize2(root);
+      const states = /* @__PURE__ */ new Map(), costs = /* @__PURE__ */ new Map();
+      cost(root);
+      if (new TextEncoder().encode(normalized).length > MAX_BYTES) return null;
+      return { source: normalized, width, height };
+    } catch {
+      return null;
+    }
+  }
+
   // src/importer.js
   var MiB = 1024 * 1024;
   var limits = { html: 8 * MiB, entry: 24 * MiB, expanded: 48 * MiB, entries: 384 };
@@ -10699,7 +11338,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
   var visibleTags = new Set("article section div p span h1 h2 h3 h4 h5 h6 b strong i em u s del strike blockquote ul ol li pre code br hr a img figure figcaption table caption thead tbody tfoot tr th td sup sub small dl dt dd".split(" "));
   var omittedTags = new Set("script style template noscript title link meta base source track param area".split(" "));
   var unsupportedTags = new Set("iframe frame frameset object embed video audio canvas input button select textarea form".split(" "));
-  var rasterExtensions = { "image/png": "png", "image/jpeg": "jpg", "image/gif": "gif", "image/webp": "webp" };
+  var imageExtensions = { "image/png": "png", "image/jpeg": "jpg", "image/gif": "gif", "image/webp": "webp", "image/svg+xml": "svg" };
   var crcTable = Uint32Array.from({ length: 256 }, (_, n) => {
     for (let i = 0; i < 8; i++) n = n >>> 1 ^ (n & 1 ? 3988292384 : 0);
     return n;
@@ -10773,13 +11412,13 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
       let prefix2 = "";
       for (let i = 1; i <= parts.length; i++) {
         prefix2 += (i === 1 ? "" : "/") + parts[i - 1];
-        const key = prefix2.toLowerCase();
+        const key2 = prefix2.toLowerCase();
         const last = i === parts.length;
-        const previous = paths.get(key);
+        const previous = paths.get(key2);
         if (previous && (previous.prefix !== prefix2 || !previous.directory || last)) {
           throw invalidInput();
         }
-        if (last || !previous) paths.set(key, { prefix: prefix2, directory: !last });
+        if (last || !previous) paths.set(key2, { prefix: prefix2, directory: !last });
       }
     }
   }
@@ -10876,6 +11515,9 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
   function attr2(node, name) {
     return node.attrs?.find((item) => item.name === name && !item.namespace)?.value ?? "";
   }
+  function equationSource(value) {
+    return typeof value === "string" && value.length <= 16384 && value.trim() && !/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f-\u009f]/u.test(value) ? value : "";
+  }
   function joinText(items) {
     const result = [];
     for (const item of items) {
@@ -10901,7 +11543,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
       return [];
     }
   }
-  async function documentModel(html, files, fallback) {
+  async function documentModel(html, files, fallback, rasterFallbacks) {
     const document2 = boundedHtml(html);
     const root = document2.childNodes.find(({ tagName: tagName2 }) => tagName2 === "html");
     const head = root.childNodes.find(({ tagName: tagName2 }) => tagName2 === "head");
@@ -10915,6 +11557,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
     const cachedWarnings = cacheWarnings ? preservedWarnings(attr2(cacheWarnings, "content")) : [];
     const importedWarningLocations = new Set(cachedWarnings.filter((item) => item.label).map(({ code, label }) => code + "\0" + label));
     const occupiedPaths = /* @__PURE__ */ new Set();
+    const invalidSvgPaths = /* @__PURE__ */ new Set();
     let embedded = 0;
     let firstHeading = "";
     let nodes = 0;
@@ -10922,15 +11565,41 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
     for (const [path, bytes] of files) {
       if (path === "document.html") continue;
       const role = path.startsWith("images/") ? "image" : "attachment";
-      const type = role === "image" ? await rasterType(bytes) : "";
-      totalBytes += bytes.length;
-      assets.set(path, { path, type: type || "application/octet-stream", bytes, role });
+      const rasterFallback = rasterFallbacks.get(path);
+      totalBytes += bytes.length + (rasterFallback?.length || 0);
       let occupied = path.toLowerCase();
       while (!occupiedPaths.has(occupied)) {
         occupiedPaths.add(occupied);
         const separator = occupied.lastIndexOf("/");
         if (separator < 0) break;
         occupied = occupied.slice(0, separator);
+      }
+      const svg = role === "image" && (/\.svg$/iu.test(path) || /<svg(?:\s|>)/iu.test(new TextDecoder().decode(bytes.subarray(0, 1024))));
+      if (svg) {
+        let checked;
+        try {
+          checked = sanitizeSvg(utf8.decode(bytes));
+        } catch {
+        }
+        if (!checked) {
+          invalidSvgPaths.add(path);
+          if (!importedWarningLocations.has("invalid_image\0" + path)) warnings2.push({ code: "invalid_image", label: path });
+          importedWarningLocations.add("invalid_image\0" + path);
+          continue;
+        }
+        const retained = new TextEncoder().encode(checked.source);
+        totalBytes += retained.length - bytes.length;
+        if (retained.length + (rasterFallback?.length || 0) > limits.entry || totalBytes > limits.expanded) throw inputLimit();
+        const asset = { path, type: "image/svg+xml", bytes: retained, role };
+        if (rasterFallback) {
+          if (await rasterType(rasterFallback) === "image/png") asset.rasterFallback = { type: "image/png", bytes: rasterFallback };
+          else warnings2.push({ code: "invalid_image", label: path + "（PDF 静态预览）" });
+        }
+        assets.set(path, asset);
+      } else {
+        if (rasterFallback) throw invalidInput();
+        const type = role === "image" ? await rasterType(bytes) : "";
+        assets.set(path, { path, type: type || "application/octet-stream", bytes, role });
       }
     }
     function note(code, description, children, path) {
@@ -10945,17 +11614,24 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
       const alt = attr2(node, "alt").slice(0, 2048);
       const label = alt ? "图片：" + alt : "图片";
       if (/^data:/iu.test(raw)) {
-        const data = /^data:(image\/(?:png|jpeg|gif|webp));base64,([a-z0-9+/]+={0,2})$/iu.exec(raw);
+        const data = /^data:(image\/(?:png|jpeg|gif|webp|svg\+xml));base64,([a-z0-9+/]+={0,2})$/iu.exec(raw);
         if (!data) return note("invalid_image", "无效" + label);
         const encoded = data[2];
         if (encoded.length > limits.entry * 4 / 3 || totalBytes + encoded.length * 3 / 4 > limits.expanded || assets.size + 1 >= limits.entries) return note("invalid_image", "无效" + label);
         try {
-          const bytes = Uint8Array.from(atob(encoded), (character) => character.charCodeAt(0));
-          const type = await rasterType(bytes);
+          let bytes = Uint8Array.from(atob(encoded), (character) => character.charCodeAt(0));
+          let type;
+          if (data[1].toLowerCase() === "image/svg+xml") {
+            const checked = sanitizeSvg(utf8.decode(bytes));
+            if (!checked) return note("invalid_image", "无效" + label);
+            bytes = new TextEncoder().encode(checked.source);
+            type = "image/svg+xml";
+            if (bytes.length > limits.entry || totalBytes + bytes.length > limits.expanded) return note("invalid_image", "无效" + label);
+          } else type = await rasterType(bytes);
           if (!type || data[1].toLowerCase() !== type) return note("invalid_image", "无效" + label);
           let path2;
           do {
-            path2 = "images/embedded-" + ++embedded + "." + rasterExtensions[type];
+            path2 = "images/embedded-" + ++embedded + "." + imageExtensions[type];
           } while (occupiedPaths.has(path2));
           occupiedPaths.add(path2);
           assets.set(path2, { path: path2, type, bytes, role: "image" });
@@ -10968,6 +11644,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
       if (/^(?:\/\/|[a-z][a-z\d+.-]*:)/iu.test(raw)) return note("remote_image", "未加载外部" + label);
       const path = localPath(raw);
       const asset = assets.get(path);
+      if (invalidSvgPaths.has(path)) return note("invalid_image", "无效" + label, null, path);
       if (asset?.role === "image" && asset.type.startsWith("image/")) return { tag: "img", path, alt };
       if (asset?.role === "image") return note("invalid_image", "无效" + label, null, path);
       return note("missing_image", "缺少" + label, null, path);
@@ -10990,6 +11667,11 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
         }
         if (tag === "img") {
           result.push(await readImage(node));
+          continue;
+        }
+        const equation = tag === "span" ? equationSource(attr2(node, "data-export-equation")) : "";
+        if (equation) {
+          result.push({ tag, equation, display: attr2(node, "data-export-display") === "block" ? "block" : "inline", children: [equation] });
           continue;
         }
         const children = await readNodes(node.childNodes ?? [], depth + 1);
@@ -11072,17 +11754,21 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
         throw inputError("invalid_input", "素材路径或字节数据无效。");
       }
       const path = assetPath(asset.path);
-      expanded += asset.bytes.length;
-      if (asset.bytes.length > limits.entry || expanded > limits.expanded) throw inputLimit();
-      entries.push({ path, bytes: asset.bytes });
+      const rasterFallback = asset.rasterFallback;
+      if (rasterFallback !== void 0 && (!rasterFallback || !(rasterFallback.bytes instanceof Uint8Array) || !path.startsWith("images/"))) throw invalidInput();
+      const size = asset.bytes.length + (rasterFallback?.bytes.length || 0);
+      expanded += size;
+      if (size > limits.entry || expanded > limits.expanded) throw inputLimit();
+      entries.push({ path, bytes: asset.bytes, rasterFallback: rasterFallback?.bytes });
     }
     validatePaths(entries);
-    const files = /* @__PURE__ */ new Map();
-    for (const { path, bytes } of entries) {
+    const files = /* @__PURE__ */ new Map(), rasterFallbacks = /* @__PURE__ */ new Map();
+    for (const { path, bytes, rasterFallback } of entries) {
       const owned = path === "document.html" && typeof html === "string";
       files.set(path, owned ? bytes : new Uint8Array(bytes));
+      if (rasterFallback) rasterFallbacks.set(path, new Uint8Array(rasterFallback));
     }
-    return documentModel(decodeHtml(files.get("document.html")), files, typeof name === "string" ? name : "文档");
+    return documentModel(decodeHtml(files.get("document.html")), files, typeof name === "string" ? name : "文档", rasterFallbacks);
   }
 
   // node_modules/fflate/esm/browser.js
@@ -11795,15 +12481,28 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
 
   // src/formats.js
   var zipOptions = { level: 1, mtime: new Date(2e3, 0, 1) };
-  var rasterTypes = /* @__PURE__ */ new Set(["image/png", "image/jpeg", "image/gif", "image/webp"]);
+  var imageTypes = /* @__PURE__ */ new Set(["image/png", "image/jpeg", "image/gif", "image/webp", "image/svg+xml"]);
   var maxOutputSize = 80 * 1024 * 1024;
   var maxMarkdownSize = 24 * 1024 * 1024;
-  var htmlStyle = "body{font:16px/1.65 system-ui,sans-serif;max-width:850px;margin:40px auto;padding:0 20px;color:#202020}img{max-width:100%;height:auto}.table-scroll{max-width:100%;overflow-x:auto;margin:1em 0}table{border-collapse:collapse}th,td{border:1px solid #999;padding:5px 10px;vertical-align:top}pre{white-space:pre;overflow:auto;max-width:100%;tab-size:4;background:#f2f2f2;padding:12px}a{overflow-wrap:anywhere}figure{margin:1em 0}.export-toc{margin:1em 0 1.5em;color:#4e5969}.export-toc summary{cursor:pointer;width:fit-content}.export-toc ul{list-style:none;padding:0;margin:.6em 0}.export-toc li{margin:.3em 0}.export-toc .toc-level-3{padding-left:1em}.export-toc .toc-level-4{padding-left:2em}.export-toc .toc-level-5{padding-left:3em}.export-toc .toc-level-6{padding-left:4em}@media(max-width:600px){body{margin:20px auto;padding:0 16px}}@media print{body{max-width:none;margin:0;padding:0}.export-toc{display:none}.table-scroll{overflow:visible}pre{white-space:pre-wrap;overflow-wrap:anywhere;overflow:visible}table{width:100%}th,td{overflow-wrap:anywhere}}";
+  var htmlStyle = 'body{font:16px/1.65 system-ui,sans-serif;max-width:850px;margin:40px auto;padding:0 20px;color:#202020}img{max-width:100%;height:auto}.table-scroll{max-width:100%;overflow-x:auto;margin:1em 0}table{border-collapse:collapse}th,td{border:1px solid #999;padding:5px 10px;vertical-align:top}pre{white-space:pre;overflow:auto;max-width:100%;tab-size:4;background:#f2f2f2;padding:12px}a{overflow-wrap:anywhere}figure{margin:1em 0}.export-equation{white-space:pre-wrap;font-family:ui-monospace,monospace;overflow-wrap:anywhere}.export-equation[data-export-display="block"]{display:block;margin:.8em 0}.export-toc{margin:1em 0 1.5em;color:#4e5969}.export-toc summary{cursor:pointer;width:fit-content}.export-toc ul{list-style:none;padding:0;margin:.6em 0}.export-toc li{margin:.3em 0}.export-toc .toc-level-3{padding-left:1em}.export-toc .toc-level-4{padding-left:2em}.export-toc .toc-level-5{padding-left:3em}.export-toc .toc-level-6{padding-left:4em}@media(max-width:600px){body{margin:20px auto;padding:0 16px}}@media print{body{max-width:none;margin:0;padding:0}.export-toc{display:none}.table-scroll{overflow:visible}pre{white-space:pre-wrap;overflow-wrap:anywhere;overflow:visible}table{width:100%}th,td{overflow-wrap:anywhere}}';
   var csp = "default-src 'none'; script-src 'none'; connect-src 'none'; img-src data:; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'";
   var blockTags = new Set("article section div p h1 h2 h3 h4 h5 h6 blockquote ul ol li pre hr figure figcaption table dl dt dd".split(" "));
   var markdownBlocksInCells = /* @__PURE__ */ new Set(["blockquote", "ul", "ol", "pre", "hr", "figure", "table", "dl"]);
   function outputLimit() {
     return Object.assign(new Error("导出结果超过本机处理上限。"), { code: "render_limit" });
+  }
+  function checkedSvgAssets(snapshot) {
+    const assets = snapshot.assets.map((asset) => {
+      if (asset.role !== "image" || asset.type !== "image/svg+xml" && !/\.svg$/iu.test(asset.path)) return asset;
+      let checked;
+      try {
+        checked = sanitizeSvg(new TextDecoder("utf-8", { fatal: true }).decode(asset.bytes));
+      } catch {
+      }
+      if (!checked) throw Object.assign(new Error("SVG 素材未通过静态校验。"), { code: "invalid_svg" });
+      return { ...asset, type: "image/svg+xml", bytes: new TextEncoder().encode(checked.source) };
+    });
+    return { ...snapshot, assets };
   }
   function escapeHtml(text) {
     return String(text).replace(/[&<>"'\r]/gu, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;", "\r": "&#13;" })[character]);
@@ -11853,10 +12552,12 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
       if (typeof node === "string") return account(escapeHtml(node));
       const { tag, children = [] } = node;
       if (!visibleTags.has(tag)) return htmlNodes(children, lookup, embedded, account, presentation, cellColor);
+      const equation = tag === "span" ? equationSource(node.equation) : "";
+      if (equation) return account('<span class="export-equation" data-export-equation="' + escapeHtml(equation) + '" data-export-display="' + (node.display === "block" ? "block" : "inline") + '">' + escapeHtml(equation) + "</span>");
       const childCellColor = tag === "td" || tag === "th" ? normalizeColor(node.color) || cellColor : cellColor;
       const asset = lookup.get(node.path);
       if (tag === "img") {
-        if (!rasterTypes.has(asset?.type) || asset.role !== "image") return account("[缺少图片]");
+        if (!imageTypes.has(asset?.type) || asset.role !== "image") return account("[缺少图片]");
         const src = embedded ? embedded(asset, true) : relativeUrl(asset.path);
         return account('<img src="' + escapeHtml(src) + '" alt="' + escapeHtml(node.alt ?? "") + '">');
       }
@@ -11991,6 +12692,12 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
   function longestBackticks(text) {
     return (text.match(/`+/gu) ?? []).reduce((longest, run) => Math.max(longest, run.length), 0);
   }
+  function markdownEquation(node, lookup, block = false) {
+    const source = node.tag === "span" ? equationSource(node.equation) : "";
+    if (!source) return "";
+    if (/[<$>`]/u.test(source) || /!\[|\]\(|&(?:#(?:x[\da-f]+|\d+)|[a-z][a-z\d]+);/iu.test(source) || !block && /[\r\n]/u.test(source)) return markdownHtml([node], lookup);
+    return block ? "$$\n" + source + (source.endsWith("\n") ? "" : "\n") + "$$" : "$" + source + "$";
+  }
   function markdownInline(nodes, lookup, table = false) {
     return joinMarkdown(nodes.map((node) => {
       if (typeof node === "string") {
@@ -11998,9 +12705,12 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
         return table ? escaped.replaceAll("|", "\\|") : escaped;
       }
       const { tag, children = [] } = node;
+      if (tag === "span" && equationSource(node.equation)) {
+        return table || node.display === "block" ? markdownHtml([node], lookup) : markdownEquation(node, lookup);
+      }
       const asset = lookup.get(node.path);
       if (tag === "img") {
-        if (!asset || asset.role !== "image" || !rasterTypes.has(asset.type)) return "\\[缺少图片\\]";
+        if (!asset || asset.role !== "image" || !imageTypes.has(asset.type)) return "\\[缺少图片\\]";
         const alt = escapeMarkdown(node.alt ?? "");
         return "![" + (table ? alt.replaceAll("|", "\\|") : alt) + "](" + relativeUrl(asset.path) + ")";
       }
@@ -12031,7 +12741,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
     return (node.children ?? []).filter((child) => typeof child !== "string");
   }
   function complexCell(node) {
-    return (node.children ?? []).some((child) => typeof child === "object" && (markdownBlocksInCells.has(child.tag) || complexCell(child)));
+    return (node.children ?? []).some((child) => typeof child === "object" && (markdownBlocksInCells.has(child.tag) || child.tag === "span" && equationSource(child.equation) || complexCell(child)));
   }
   function markdownTable(table, lookup) {
     const sections = onlyElements(table);
@@ -12116,7 +12826,10 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
       inline = [];
     }
     for (const node of nodes) {
-      if (typeof node === "object" && blockTags.has(node.tag)) {
+      if (typeof node === "object" && node.tag === "span" && node.display === "block" && equationSource(node.equation)) {
+        flush();
+        chunks.push(markdownEquation(node, lookup, true));
+      } else if (typeof node === "object" && blockTags.has(node.tag)) {
         flush();
         chunks.push(markdownBlock(node, lookup));
       } else {
@@ -12159,6 +12872,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
   async function renderFile(kind, snapshot) {
     const file = safeStem(snapshot.title);
     if (kind === "html") {
+      snapshot = checkedSvgAssets(snapshot);
       return {
         filename: file + ".html",
         blob: new Blob([standaloneHtml(snapshot, maxOutputSize)], { type: "text/html;charset=utf-8" })
@@ -12168,6 +12882,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
     throw new Error("不支持此导出格式。");
   }
   function renderBundle(kinds, snapshot, extraFiles = []) {
+    snapshot = checkedSvgAssets(snapshot);
     const selected = new Set(kinds);
     if (!Array.isArray(extraFiles)) throw new Error("附加文件需要安全的根目录文件名和字节数据。");
     for (const extra of extraFiles) {
@@ -12188,13 +12903,13 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
       let prefix2 = "";
       for (let index = 0; index < parts.length; index++) {
         prefix2 += (index ? "/" : "") + parts[index];
-        const key = prefix2.normalize("NFC").toLowerCase();
+        const key2 = prefix2.normalize("NFC").toLowerCase();
         const directory = index < parts.length - 1;
-        const previous = paths.get(key);
+        const previous = paths.get(key2);
         if (previous && (previous.name !== prefix2 || !previous.directory || !directory)) {
           throw new Error("归档中的文件名重复或与目录冲突。");
         }
-        if (!previous) paths.set(key, { name: prefix2, directory });
+        if (!previous) paths.set(key2, { name: prefix2, directory });
       }
       totalBytes += bytes.length;
       if (totalBytes > maxOutputSize) throw outputLimit();
@@ -12316,8 +13031,8 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
   var boundsKeys = ["minX", "maxX", "minY", "maxY"];
   function sceneBounds(manager) {
     const source = manager.getNodesBounds();
-    if (!source || !boundsKeys.every((key) => Number.isFinite(source[key]))) return null;
-    const bounds = Object.fromEntries(boundsKeys.map((key) => [key, source[key]]));
+    if (!source || !boundsKeys.every((key2) => Number.isFinite(source[key2]))) return null;
+    const bounds = Object.fromEntries(boundsKeys.map((key2) => [key2, source[key2]]));
     const width = bounds.maxX - bounds.minX, height = bounds.maxY - bounds.minY;
     return width > 0 && height > 0 && Number.isFinite(width * height) ? bounds : null;
   }
@@ -12339,18 +13054,18 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
     let canvas, owned = false;
     try {
       checkStop();
-      const key = String(id);
-      if (!/^[\w-]{1,160}$/u.test(key)) return null;
+      const key2 = String(id);
+      if (!/^[\w-]{1,160}$/u.test(key2)) return null;
       const page = document2?.querySelector('[data-block-type="page"]');
-      const block = document2?.querySelector('[data-block-id="' + key + '"]');
+      const block = document2?.querySelector('[data-block-id="' + key2 + '"]');
       const pageId = page?.getAttribute("data-record-id"), recordId = block?.getAttribute("data-record-id");
       const root = pageView?.PageMain?.blockManager?.rootBlockModel;
       if (!pageId || !recordId || !root || root.record?.id !== pageId || block.isConnected === false || block.getAttribute("data-block-type") !== "whiteboard" || !page.contains(block)) return null;
-      const model = findBoard(root, key, recordId);
+      const model = findBoard(root, key2, recordId);
       const app = model?.whiteboardBlock?.abilityKit?.getRatioApp?.()?.app;
       const manager = app?.application?.nodeManager, renderer = app?.renderManager;
       if (typeof manager?.getNodesBounds !== "function" || typeof renderer?.getImageOffscreenCanvas !== "function") return null;
-      const belongsToPage = () => pageView?.PageMain?.blockManager?.rootBlockModel === root && root.record?.id === pageId && document2.querySelector('[data-block-type="page"]') === page && page.getAttribute("data-record-id") === pageId && document2.querySelector('[data-block-id="' + key + '"]') === block && block.isConnected !== false && block.getAttribute("data-record-id") === recordId && page.contains(block) && findBoard(root, key, recordId) === model && model.whiteboardBlock?.abilityKit?.getRatioApp?.()?.app === app;
+      const belongsToPage = () => pageView?.PageMain?.blockManager?.rootBlockModel === root && root.record?.id === pageId && document2.querySelector('[data-block-type="page"]') === page && page.getAttribute("data-record-id") === pageId && document2.querySelector('[data-block-id="' + key2 + '"]') === block && block.isConnected !== false && block.getAttribute("data-record-id") === recordId && page.contains(block) && findBoard(root, key2, recordId) === model && model.whiteboardBlock?.abilityKit?.getRatioApp?.()?.app === app;
       if (waitForReady && !await waitForReady()) return null;
       checkStop();
       if (!belongsToPage()) return null;
@@ -12384,6 +13099,290 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
       if (error?.name === "AbortError") throw error;
       return null;
     } finally {
+      if (owned) {
+        try {
+          canvas.width = 0;
+          canvas.height = 0;
+        } catch {
+        }
+      }
+    }
+  }
+
+  // src/userscript/model.js
+  var MAX_BLOCKS = 2e4;
+  var MAX_TEXT = 4 * 1024 * 1024;
+  var key = (value) => typeof value === "string" || Number.isSafeInteger(value) ? String(value) : "";
+  var blockKey = (value) => {
+    const id = key(value);
+    return /^[\w-]{1,160}$/u.test(id) ? id : "";
+  };
+  var pageWindow = () => typeof unsafeWindow === "undefined" ? globalThis : unsafeWindow;
+  function pageContext(document2, pageView) {
+    const page = document2?.querySelector('[data-block-type="page"]');
+    const root = pageView?.PageMain?.blockManager?.rootBlockModel;
+    const recordId = page?.getAttribute("data-record-id");
+    return page && page.isConnected !== false && recordId && root?.record?.id === recordId ? { page, root, recordId } : null;
+  }
+  function findModel(root, id, recordId, type) {
+    const pending = [root], seen = /* @__PURE__ */ new Set();
+    while (pending.length && seen.size < MAX_BLOCKS) {
+      const model = pending.pop();
+      if (!model || typeof model !== "object" || seen.has(model)) continue;
+      seen.add(model);
+      if (blockKey(model.id) === id && model.record?.id === recordId && model.type === type) return model;
+      for (const children of [model.children, model.innerBlockManager?.rootBlockModel?.children]) {
+        if (!Array.isArray(children)) continue;
+        if (children.length > MAX_BLOCKS || pending.length + children.length > MAX_BLOCKS) return null;
+        for (let index = children.length - 1; index >= 0; index--) pending.push(children[index]);
+      }
+    }
+    return null;
+  }
+  function readBlockContext(document2, id, { pageView = pageWindow(), type } = {}) {
+    try {
+      const blockId = blockKey(id);
+      if (!blockId) return null;
+      const context = pageContext(document2, pageView), element = document2?.querySelector('[data-block-id="' + blockId + '"]');
+      const recordId = element?.getAttribute("data-record-id"), blockType = element?.getAttribute("data-block-type");
+      if (!context || !recordId || !blockType || type && blockType !== type || element.isConnected === false || !context.page.contains(element)) return null;
+      const { root, page } = context, model = findModel(root, blockId, recordId, blockType);
+      if (!model) return null;
+      const getView = () => typeof model.blockManager?.getBlockViewByBlockId === "function" ? model.blockManager.getBlockViewByBlockId(model.id) || null : null;
+      const view = getView();
+      const current = () => {
+        try {
+          const next = pageContext(document2, pageView);
+          return Boolean(next?.root === root && next.page === page && next.recordId === context.recordId && document2.querySelector('[data-block-id="' + blockId + '"]') === element && element.isConnected !== false && element.getAttribute("data-record-id") === recordId && element.getAttribute("data-block-type") === blockType && page.contains(element) && findModel(root, blockId, recordId, blockType) === model && getView() === view);
+        } catch {
+          return false;
+        }
+      };
+      return current() ? { model, view, root, page, element, current } : null;
+    } catch {
+      return null;
+    }
+  }
+  function readPageModel({ document: document2 = globalThis.document, pageView = pageWindow() } = {}) {
+    try {
+      const context = pageContext(document2, pageView);
+      if (!context) return null;
+      const { root, page, recordId } = context, rootId = blockKey(root.id);
+      if (!rootId) return null;
+      const blocks = [], warnings2 = [], seen = /* @__PURE__ */ new Set(), ids = /* @__PURE__ */ new Set();
+      let textSize = 0, limited = false;
+      const warn = (code, label) => warnings2.push({ code, label });
+      const text = (value) => {
+        if (typeof value !== "string") return "";
+        textSize += value.length;
+        if (textSize > MAX_TEXT) {
+          limited = true;
+          return "";
+        }
+        return value;
+      };
+      const caption = (value, id) => {
+        const chunks = value?.text?.initialAttributedTexts?.text;
+        if (chunks == null) return "";
+        if (Array.isArray(chunks) && chunks.length > MAX_BLOCKS) {
+          limited = true;
+          return "";
+        }
+        if (!Array.isArray(chunks) || !chunks.every((chunk) => typeof chunk === "string")) {
+          warn("unsupported_block", "块 " + id + " 的图注结构未识别，未将未知数据拼入正文。");
+          return "";
+        }
+        let output = "";
+        for (const chunk of chunks) {
+          output += text(chunk);
+          if (limited) return "";
+        }
+        return output;
+      };
+      const childrenOf = (model) => Array.isArray(model.innerBlockManager?.rootBlockModel?.children) ? model.innerBlockManager.rootBlockModel.children : Array.isArray(model.children) ? model.children : [];
+      const rootChildren = childrenOf(root);
+      const roots = rootChildren.slice(0, MAX_BLOCKS).map((model) => blockKey(model?.id)).filter(Boolean);
+      const pending = [];
+      for (let index = Math.min(rootChildren.length, MAX_BLOCKS) - 1; index >= 0; index--) pending.push({ model: rootChildren[index], parentId: rootId });
+      if (rootChildren.length > MAX_BLOCKS) limited = true;
+      while (pending.length && blocks.length < MAX_BLOCKS && !limited) {
+        const { model, parentId } = pending.pop();
+        if (!model || typeof model !== "object" || seen.has(model)) {
+          warn("missing_block", "正文模型包含重复或循环节点，未确认完整结构。");
+          continue;
+        }
+        seen.add(model);
+        const id = blockKey(model.id), type = typeof model.type === "string" ? model.type : "";
+        if (!id || !type || ids.has(id)) {
+          warn("missing_block", "正文模型包含无法区分的块，未确认完整结构。");
+          continue;
+        }
+        ids.add(id);
+        const snapshot = model.snapshot || {}, children = childrenOf(model);
+        if (children.length > MAX_BLOCKS) {
+          limited = true;
+          break;
+        }
+        const ready = snapshot.type !== "pending" && !(type === "synced_reference" && model.isAllDataReady !== true) && !(type === "fallback" && snapshot.type === "whiteboard");
+        const block = { id, recordId: key(model.record?.id), parentId, type, children: children.map((child) => blockKey(child?.id)).filter(Boolean), ready };
+        if (!ready) warn("missing_block", "正文模型块 " + id + " 尚未加载完整。");
+        if (typeof model.zoneState?.allText === "string") block.text = text(model.zoneState.allText);
+        const ops = model.zoneState?.content?.ops;
+        if (Array.isArray(ops)) {
+          block.ops = [];
+          if (ops.length > 1e5) {
+            limited = true;
+            break;
+          }
+          for (const op of ops) {
+            if (limited) break;
+            const attrs = op?.attributes || {}, attributes = {};
+            for (const name of ["bold", "italic", "underline", "strikethrough", "inlineCode", "fixEnter"]) {
+              if (["boolean", "number", "string"].includes(typeof attrs[name])) attributes[name] = attrs[name];
+            }
+            for (const name of ["link", "equation"]) if (typeof attrs[name] === "string") attributes[name] = text(attrs[name]);
+            if (attrs["inline-component"] !== void 0) {
+              attributes.unresolvedInline = true;
+              try {
+                if (typeof attrs["inline-component"] !== "string" || attrs["inline-component"].length >= 64 * 1024) throw new Error("shape");
+                const component = JSON.parse(attrs["inline-component"]);
+                if (component?.type === "mention_doc") {
+                  if (component.data && (typeof component.data.title === "string" && component.data.title || typeof component.data.raw_url === "string" && component.data.raw_url)) {
+                    attributes.mention = { title: text(component.data.title), url: text(component.data.raw_url) };
+                    delete attributes.unresolvedInline;
+                  } else warn("unsupported_block", "块 " + id + " 的文档引用元数据无法解析。");
+                }
+              } catch {
+                warn("unsupported_block", "块 " + id + " 的文档引用元数据无法解析。");
+              }
+            }
+            if (typeof op?.insert !== "string" && !attributes.equation && !attributes.mention) attributes.unresolvedInline = true;
+            block.ops.push({ insert: text(op?.insert), attributes });
+          }
+        }
+        if (type === "image") block.caption = caption(snapshot.image?.caption, id);
+        if (type === "whiteboard") block.caption = caption(snapshot.caption, id);
+        if (type === "ordered" && ["string", "number"].includes(typeof snapshot.seq)) block.seq = String(snapshot.seq);
+        if (type === "todo" && typeof snapshot.done === "boolean") block.done = snapshot.done;
+        if (type === "isv") {
+          if (snapshot.block_type_id === "blk_631fefbbae02400430b8f9f4" && typeof snapshot.data?.data === "string") {
+            block.source = { language: "mermaid", text: text(snapshot.data.data) };
+          } else if (snapshot.block_type_id === "blk_6358a421bca0001c22536e4c" && Array.isArray(snapshot.data?.items) && snapshot.data.items.length <= MAX_BLOCKS && snapshot.data.items.every((item) => item && ["time", "title", "text"].every((name) => item[name] === void 0 || typeof item[name] === "string"))) {
+            block.timeline = snapshot.data.items.map((item) => ({ time: text(item.time), title: text(item.title), text: text(item.text) }));
+          } else warn("unsupported_block", "插件块 " + id + " 的源码格式未识别。");
+        }
+        if (limited) block.ready = false;
+        blocks.push(block);
+        if (children.length > MAX_BLOCKS || pending.length + children.length > MAX_BLOCKS) {
+          limited = true;
+          break;
+        }
+        for (let index = children.length - 1; index >= 0; index--) pending.push({ model: children[index], parentId: id });
+      }
+      if (pending.length || limited) warn("missing_block", "正文模型超过读取限制，未确认完整结构。");
+      const next = pageContext(document2, pageView);
+      if (next?.root !== root || next.page !== page || next.recordId !== recordId) return null;
+      return { version: 1, rootId, recordId, roots, blocks, warnings: warnings2 };
+    } catch {
+      return null;
+    }
+  }
+
+  // src/userscript/whiteboard-isolated.js
+  var pageWindow2 = () => typeof unsafeWindow === "undefined" ? globalThis : unsafeWindow;
+  var release = (wrapper) => {
+    try {
+      Promise.resolve(wrapper?.release?.()).catch(() => {
+      });
+    } catch {
+    }
+  };
+  function boundsOf(manager) {
+    const bounds = manager.getNodesBounds();
+    if (!bounds || !["minX", "maxX", "minY", "maxY"].every((name) => Number.isFinite(bounds[name]))) return null;
+    const { minX, maxX, minY, maxY } = bounds, width = maxX - minX + 48, height = maxY - minY + 48;
+    if (maxX <= minX || maxY <= minY || !Number.isFinite(width * height)) return null;
+    return { minX, maxX, minY, maxY };
+  }
+  async function readIsolatedWhiteboard(id, {
+    document: document2 = globalThis.document,
+    pageView = pageWindow2(),
+    checkStop = () => {
+    },
+    waitForReady,
+    timeoutMs = 8e3
+  } = {}) {
+    let wrapper, canvas, owned = false, finished = false, timer, interval, rejectStopped;
+    try {
+      checkStop();
+      const context = readBlockContext(document2, id, { pageView, type: "whiteboard" });
+      if (!context) return null;
+      const board = context.model.whiteboardBlock, environment = board?.isolateEnv;
+      if (typeof environment?.getRatioApp !== "function") return null;
+      const ratioApp = environment.getRatioApp(), proxy = ratioApp?.ratioAppProxy, app = ratioApp?.app;
+      const manager = app?.application?.nodeManager;
+      if (typeof proxy?.getOriginImageDataByNodeId !== "function" || typeof manager?.getNodesBounds !== "function") return null;
+      const current = () => {
+        const next = environment.getRatioApp();
+        return context.current() && context.model.whiteboardBlock === board && board.isolateEnv === environment && next?.ratioAppProxy === proxy && next.app === app && app.application?.nodeManager === manager;
+      };
+      const stopped = new Promise((resolve, reject) => {
+        rejectStopped = reject;
+      });
+      stopped.catch(() => {
+      });
+      timer = setTimeout(() => rejectStopped(new Error("隔离画板读取超时")), Math.max(1, Math.min(Number(timeoutMs) || 8e3, 3e4)));
+      interval = setInterval(() => {
+        try {
+          checkStop();
+        } catch (error) {
+          rejectStopped(error);
+        }
+      }, 50);
+      const wait2 = (promise) => Promise.race([Promise.resolve(promise), stopped]);
+      if (waitForReady && await wait2(waitForReady()) === false) return null;
+      checkStop();
+      if (!current()) return null;
+      const bounds = boundsOf(manager);
+      if (!bounds) return null;
+      const width = bounds.maxX - bounds.minX + 48, height = bounds.maxY - bounds.minY + 48;
+      const ratio2 = Math.min(2, 8192 / width, 8192 / height, Math.sqrt(159e5 / (width * height)));
+      if (!Number.isFinite(ratio2) || ratio2 <= 0) return null;
+      const maxWidth = Math.ceil(width * ratio2), maxHeight = Math.ceil(height * ratio2);
+      const receiving = Promise.resolve(proxy.getOriginImageDataByNodeId(24, [""], false, ratio2)).then((value) => {
+        if (finished) release(value);
+        else wrapper = value;
+        return value;
+      });
+      await wait2(receiving);
+      checkStop();
+      const finalBounds = boundsOf(manager);
+      if (!current() || !finalBounds || Object.keys(bounds).some((key2) => bounds[key2] !== finalBounds[key2])) return null;
+      const data = wrapper?.data, w = data?.width, h = data?.height, pixels = data?.data;
+      if (!Number.isSafeInteger(w) || !Number.isSafeInteger(h) || w < 1 || h < 1 || w !== maxWidth || h !== maxHeight || w > 8192 || h > 8192 || w * h > 16e6 || !ArrayBuffer.isView(pixels) || pixels.BYTES_PER_ELEMENT !== 1 || pixels.byteLength !== w * h * 4) return null;
+      canvas = document2.createElement("canvas");
+      if (canvas.isConnected === true || document2.contains?.(canvas)) return null;
+      owned = true;
+      canvas.width = w;
+      canvas.height = h;
+      const output = canvas.getContext("2d");
+      if (!output) return null;
+      output.putImageData(data, 0, 0);
+      checkStop();
+      const dataUrl2 = canvas.toDataURL("image/png");
+      if (dataUrl2.length > 32 * 1024 * 1024 + 64 || !/^data:image\/png;base64,[A-Za-z0-9+/]+={0,2}$/u.test(dataUrl2)) return null;
+      checkStop();
+      const encodedBounds = boundsOf(manager);
+      if (!current() || !encodedBounds || Object.keys(bounds).some((key2) => bounds[key2] !== encodedBounds[key2])) return null;
+      return { blockId: id, mime: "image/png", width: w, height: h, alt: "白板静态图", dataUrl: dataUrl2, source: "native-isolated" };
+    } catch (error) {
+      if (error?.name === "AbortError") throw error;
+      return null;
+    } finally {
+      finished = true;
+      clearTimeout(timer);
+      clearInterval(interval);
+      release(wrapper);
       if (owned) {
         try {
           canvas.width = 0;
@@ -12588,6 +13587,13 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
       waitForReady: async () => Boolean(await waitForStableCanvas(id, document2, wait2, checkStop))
     });
     if (native) return native;
+    const isolated = await readIsolatedWhiteboard(id, {
+      document: document2,
+      pageView,
+      checkStop,
+      waitForReady: async () => Boolean(await waitForStableCanvas(id, document2, wait2, checkStop))
+    });
+    if (isolated) return isolated;
     const plan = source && redrawPlan(block, source);
     const box = source.getBoundingClientRect();
     const limited = Boolean(plan) || Math.min(source.width / box.width, source.height / box.height) < 2;
@@ -12609,6 +13615,255 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
     const preview = await waitForStableCanvas(id, document2, wait2, checkStop);
     if (!preview) throw new Error("白板内容画面尚未绘制，或未确认唯一且可见的内容画布");
     return copyPreview(id, preview, document2, checkStop, limited);
+  }
+
+  // src/userscript/native-media.js
+  var MAX_BYTES2 = 24 * 1024 * 1024;
+  var CACHE_BYTES = 48 * 1024 * 1024;
+  var CACHE_ENTRIES = 128;
+  var nativeHosts = /(?:^|\.)(?:feishu\.cn|feishu\.net|larksuite\.com|larkoffice\.com|byteimg\.com|ibytedtos\.com)$/u;
+  var pageWindow3 = () => typeof unsafeWindow === "undefined" ? globalThis : unsafeWindow;
+  var validToken = (value) => typeof value === "string" && /^[\w-]{1,256}$/u.test(value);
+  function trustedURL(value, location2, { blob = false } = {}) {
+    try {
+      const url = new URL(value);
+      if (blob && url.protocol === "blob:" && url.origin === location2?.origin) return url;
+      return url.protocol === "https:" && !url.username && !url.password && !url.port && nativeHosts.test(url.hostname) ? url : null;
+    } catch {
+      return null;
+    }
+  }
+  function operation(checkStop, timeoutMs) {
+    const controller = new AbortController();
+    let failure, closed = false, timeout, interval;
+    let rejectStopped;
+    const stopped = new Promise((resolve, reject) => {
+      rejectStopped = reject;
+    });
+    stopped.catch(() => {
+    });
+    const stop = (error) => {
+      if (closed || failure) return;
+      failure = error;
+      rejectStopped(error);
+      controller.abort();
+    };
+    const check = () => {
+      if (failure) throw failure;
+      try {
+        checkStop();
+      } catch (error) {
+        stop(error);
+        throw error;
+      }
+    };
+    timeout = setTimeout(() => stop(new Error("素材读取超时，请稍后重试")), Math.max(1, Math.min(Number(timeoutMs) || 1e4, 3e4)));
+    interval = setInterval(() => {
+      try {
+        check();
+      } catch {
+      }
+    }, 50);
+    return {
+      signal: controller.signal,
+      check,
+      wait: (promise) => Promise.race([Promise.resolve(promise), stopped]).then((value) => {
+        check();
+        return value;
+      }),
+      abort: () => controller.abort(),
+      close() {
+        closed = true;
+        clearTimeout(timeout);
+        clearInterval(interval);
+        controller.abort();
+      }
+    };
+  }
+  async function readBytes(url, { fetch, op, image = false }) {
+    op.check();
+    const response = await op.wait(fetch(url.href, { credentials: "include", redirect: "error", signal: op.signal }));
+    if (!response?.ok) throw new Error("素材下载失败（HTTP " + (response?.status ?? "未知") + "），请检查文档权限");
+    let final;
+    try {
+      final = new URL(response.url || url.href);
+    } catch {
+      throw new Error("素材下载地址无效");
+    }
+    if (final.origin !== url.origin || final.protocol !== url.protocol || final.pathname !== url.pathname || final.search !== url.search) {
+      throw new Error("素材下载地址发生变化，未保存重定向内容");
+    }
+    const mime = (response.headers.get("content-type") || "").split(";")[0].trim().toLowerCase();
+    if (image && mime && mime !== "application/octet-stream" && !/^image\/(?:png|jpeg|gif|webp)$/u.test(mime)) {
+      throw new Error("高清图片返回了非图片内容，可能需要重新登录");
+    }
+    const declared = response.headers.get("content-length");
+    if (declared && (!/^\d+$/u.test(declared) || Number(declared) > MAX_BYTES2)) throw new Error("素材大小超过单项24 MiB限制");
+    const reader = response.body?.getReader();
+    if (!reader) throw new Error("浏览器不支持有界素材读取");
+    const chunks = [];
+    let length = 0, finished = false;
+    try {
+      while (true) {
+        const { value, done } = await op.wait(reader.read());
+        if (done) {
+          finished = true;
+          break;
+        }
+        if (!ArrayBuffer.isView(value) || value.BYTES_PER_ELEMENT !== 1) throw new Error("素材下载流格式无效");
+        length += value.byteLength;
+        if (length > MAX_BYTES2) throw new Error("素材大小超过单项24 MiB限制");
+        chunks.push(value);
+      }
+      if (!length) throw new Error("素材文件为空");
+      const bytes = new Uint8Array(length);
+      let offset = 0;
+      for (const chunk of chunks) {
+        bytes.set(chunk, offset);
+        offset += chunk.byteLength;
+      }
+      return { bytes, mime };
+    } finally {
+      if (!finished) {
+        op.abort();
+        try {
+          Promise.resolve(reader.cancel()).catch(() => {
+          });
+        } catch {
+        }
+      }
+      try {
+        reader.releaseLock();
+      } catch {
+      }
+    }
+  }
+  function cached(cache, key2, root) {
+    const entry = cache instanceof Map ? cache.get(key2) : null;
+    return entry?.nativeMedia === true && entry.root === root ? entry.result : null;
+  }
+  function remember(cache, key2, root, result, size) {
+    if (!(cache instanceof Map)) return;
+    cache.delete(key2);
+    cache.set(key2, { nativeMedia: true, root, result, size });
+    let count = 0, total = 0;
+    for (const value of cache.values()) {
+      if (value?.nativeMedia === true) {
+        count++;
+        total += value.size;
+      }
+    }
+    for (const [oldKey, value] of cache) {
+      if (count <= CACHE_ENTRIES && total <= CACHE_BYTES) break;
+      if (value?.nativeMedia !== true) continue;
+      cache.delete(oldKey);
+      count--;
+      total -= value.size;
+    }
+  }
+  function dataURL(mime, bytes) {
+    const parts = [];
+    for (let offset = 0; offset < bytes.length; offset += 32768) parts.push(String.fromCharCode(...bytes.subarray(offset, offset + 32768)));
+    return "data:" + mime + ";base64," + btoa(parts.join(""));
+  }
+  async function readNativeImage(id, {
+    document: document2 = globalThis.document,
+    pageView = pageWindow3(),
+    checkStop = () => {
+    },
+    cache,
+    timeoutMs,
+    fetch: fetcher = globalThis.fetch
+  } = {}) {
+    checkStop();
+    const context = readBlockContext(document2, id, { pageView, type: "image" });
+    if (!context) return null;
+    const { model, root } = context, manager = model.imageManager, image = model.snapshot?.image, token = image?.token;
+    if (!validToken(token) || typeof manager?.fetch !== "function") return null;
+    const current = () => context.current() && model.imageManager === manager && model.snapshot?.image?.token === token;
+    const alt = () => typeof model.snapshot?.image?.name === "string" ? model.snapshot.image.name : "";
+    const key2 = "native:image:" + root.record.id + ":" + token;
+    const previous = cached(cache, key2, root);
+    if (previous && current()) return { ...previous, blockId: id, alt: alt() };
+    const op = operation(checkStop, timeoutMs);
+    try {
+      const sources = await op.wait(new Promise((resolve, reject) => {
+        try {
+          Promise.resolve(manager.fetch({ token, isHD: true, fuzzy: false }, {}, resolve)).catch(reject);
+        } catch (error) {
+          reject(error);
+        }
+      }));
+      if (!current()) return null;
+      const url = trustedURL(sources?.src, pageView.location || document2.defaultView?.location, { blob: true });
+      if (!url) throw new Error("高清图片来源地址未通过验证");
+      const { bytes } = await readBytes(url, { fetch: fetcher, op, image: true });
+      op.check();
+      if (!current()) return null;
+      const [mime, width, height] = imageDimensions(bytes);
+      if (!mime || !Number.isSafeInteger(width) || !Number.isSafeInteger(height) || width < 1 || height < 1 || width > 8192 || height > 8192 || width * height > 16e6) throw new Error("高清图片编码无效或尺寸超过限制");
+      const result = { blockId: id, mime, width, height, alt: alt(), dataUrl: dataURL(mime, bytes), source: "native-hd" };
+      op.check();
+      if (!current()) return null;
+      remember(cache, key2, root, result, bytes.byteLength);
+      return result;
+    } finally {
+      op.close();
+    }
+  }
+  async function readNativeAttachment(id, {
+    document: document2 = globalThis.document,
+    pageView = pageWindow3(),
+    checkStop = () => {
+    },
+    cache,
+    timeoutMs,
+    fetch: fetcher = globalThis.fetch
+  } = {}) {
+    checkStop();
+    const context = readBlockContext(document2, id, { pageView, type: "file" });
+    if (!context) return null;
+    const { model, root } = context, file = model.snapshot?.file, token = file?.token, name = file?.name;
+    if (!validToken(token) || typeof name !== "string" || !name.trim() || name.length > 1024 || /[\u0000-\u001f]/u.test(name)) return null;
+    const hostname = pageView.globalConfig?.drive_api?.[0];
+    if (typeof hostname !== "string" || !/^[a-z0-9.-]+$/iu.test(hostname)) return null;
+    const url = trustedURL("https://" + hostname + "/space/api/box/stream/download/all/" + token);
+    if (!url) return null;
+    url.searchParams.set("mount_node_token", model.record.id);
+    url.searchParams.set("mount_point", "docx_file");
+    url.searchParams.set("synced_block_host_token", root.record.id);
+    url.searchParams.set("synced_block_host_type", "22");
+    const current = () => context.current() && model.snapshot?.file?.token === token && model.snapshot.file.name === name && pageView.globalConfig?.drive_api?.[0] === hostname;
+    const key2 = "native:file:" + root.record.id + ":" + token, previous = cached(cache, key2, root);
+    if (previous && current()) return { ...previous, blockId: id, name, bytes: previous.bytes.slice() };
+    const op = operation(checkStop, timeoutMs);
+    try {
+      const { bytes, mime } = await readBytes(url, { fetch: fetcher, op });
+      op.check();
+      if (!current()) return null;
+      const nativeMime = typeof (file.mime_type || file.mimeType || file.mime) === "string" ? (file.mime_type || file.mimeType || file.mime).split(";")[0].trim().toLowerCase() : "";
+      const html = mime === "text/html" || /^\s*(?:<!doctype\s+html|<html\b)/iu.test(new TextDecoder().decode(bytes.subarray(0, 512)));
+      if (html && !(/\.html?$/iu.test(name) && nativeMime === "text/html")) {
+        throw new Error("附件返回了网页内容，可能需要重新登录或没有下载权限");
+      }
+      const jsonMime = (value) => /^(?:application|text)\/(?:[\w.-]+\+)?json$/u.test(value);
+      if (!(/\.json$/iu.test(name) || jsonMime(nativeMime))) {
+        let jsonError = false;
+        if (bytes.length <= 64 * 1024) {
+          try {
+            const response = JSON.parse(new TextDecoder().decode(bytes));
+            jsonError = response && typeof response === "object" && !Array.isArray(response) && ["number", "string"].includes(typeof response.code) && Number.isFinite(Number(response.code)) && Number(response.code) !== 0 && ["msg", "message", "error"].some((key3) => typeof response[key3] === "string" && response[key3].trim());
+          } catch {
+          }
+        }
+        if (jsonMime(mime) || jsonError) throw new Error("附件返回了JSON接口响应，可能没有下载权限，未保存为原件");
+      }
+      const result = { blockId: id, name, mime: mime || "application/octet-stream", bytes };
+      remember(cache, key2, root, { ...result, bytes: bytes.slice() }, bytes.byteLength);
+      return result;
+    } finally {
+      op.close();
+    }
   }
 
   // src/userscript/image.js
@@ -12642,10 +13897,27 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
   function checkDimensions(width, height) {
     if (!Number.isSafeInteger(width) || !Number.isSafeInteger(height) || width < 1 || height < 1 || width > 8192 || height > 8192 || width * height > 16e6) throw new Error("图片位图尺寸超过限制或无效");
   }
-  async function captureLoadedImage(id, { document: document2 = globalThis.document, wait: wait2, checkStop, saved } = {}) {
+  async function captureLoadedImage(id, {
+    document: document2 = globalThis.document,
+    wait: wait2,
+    checkStop = () => {
+    },
+    saved,
+    pageView,
+    cache,
+    fetch,
+    timeoutMs
+  } = {}) {
+    const current = () => readImageState(document2.querySelector('[data-block-id="' + id + '"]'));
+    try {
+      const image = await readNativeImage(id, { document: document2, pageView, checkStop, cache, fetch, timeoutMs });
+      if (image) return { image, state: current() };
+    } catch (error) {
+      if (error.name === "AbortError") throw error;
+    }
+    checkStop();
     const started = Date.now();
     let previous = null, stableSince = started;
-    const current = () => readImageState(document2.querySelector('[data-block-id="' + id + '"]'));
     while (Date.now() - started <= 2500) {
       checkStop();
       const state = current();
@@ -12674,7 +13946,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
           const dataUrl2 = canvas.toDataURL("image/png");
           if (!/^data:image\/png;base64,[A-Za-z0-9+/]+={0,2}$/u.test(dataUrl2)) throw new Error("图片未生成有效PNG");
           if (!sameImageState(state, current())) continue;
-          return { state, image: { blockId: id, alt: state.node.getAttribute("alt") || "", mime: "image/png", width, height, dataUrl: dataUrl2 } };
+          return { state, image: { blockId: id, alt: state.node.getAttribute("alt") || "", mime: "image/png", width, height, dataUrl: dataUrl2, source: "loaded-bitmap" } };
         } finally {
           bitmap?.close();
         }
@@ -12686,30 +13958,8 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
   }
 
   // src/userscript/diagram.js
-  var SVG = "http://www.w3.org/2000/svg";
-  var XHTML = "http://www.w3.org/1999/xhtml";
-  var svgTags = /* @__PURE__ */ new Set([
-    "svg",
-    "g",
-    "defs",
-    "path",
-    "rect",
-    "circle",
-    "ellipse",
-    "line",
-    "polyline",
-    "polygon",
-    "text",
-    "tspan",
-    "title",
-    "desc",
-    "clipPath",
-    "linearGradient",
-    "radialGradient",
-    "stop",
-    "foreignObject"
-  ]);
-  var htmlTags = /* @__PURE__ */ new Set(["div", "span", "strong", "b", "br", "i", "em", "p"]);
+  var SVG2 = "http://www.w3.org/2000/svg";
+  var XHTML2 = "http://www.w3.org/1999/xhtml";
   function findDiagram(root, id, recordId) {
     const pending = [root], seen = /* @__PURE__ */ new Set();
     while (pending.length && seen.size < 2e4) {
@@ -12724,7 +13974,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
     return null;
   }
   function dimensions(svg) {
-    if (svg?.namespaceURI !== SVG || svg.localName !== "svg") return null;
+    if (svg?.namespaceURI !== SVG2 || svg.localName !== "svg") return null;
     const size = (name) => {
       const value = svg.getAttribute(name);
       return typeof value === "string" && /^\d+(?:\.\d+)?(?:px)?$/u.test(value) ? Number.parseFloat(value) : NaN;
@@ -12741,18 +13991,10 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
       const { node, html, depth } = pending.pop();
       if (++count > 2e4 || depth > 128) return null;
       if (node.nodeType === 3 || node.nodeType === 4 || node.nodeType === 8) continue;
-      if (node.nodeType !== 1 || node.namespaceURI !== (html ? XHTML : SVG) || !(html ? htmlTags : svgTags).has(node.localName)) return null;
-      for (const attribute of node.attributes) {
-        const name = attribute.name.toLowerCase(), value = attribute.value;
-        if (name === "xmlns" || name.startsWith("xmlns:")) {
-          if (![SVG, XHTML, "http://www.w3.org/1999/xlink"].includes(value)) return null;
-        } else if (attribute.namespaceURI && attribute.namespaceURI !== "http://www.w3.org/XML/1998/namespace") return null;
-        if (name.startsWith("on") || /(?:^|:)(?:href|src)$/u.test(name) || /[\\\u0000-\u001f]|(?:url|image(?:-set)?|cross-fade|element|paint)\s*\(|@import|expression\s*\(|javascript\s*:|(?:animation|transition|behavior|binding)\s*:/iu.test(value)) return null;
-      }
+      if (node.nodeType !== 1 || node.namespaceURI !== (html ? XHTML2 : SVG2)) return null;
       for (const child of node.childNodes) pending.push({ node: child, html: html || node.localName === "foreignObject", depth: depth + 1 });
     }
-    const source = serializer.serializeToString(svg);
-    return typeof source === "string" && source.length <= 2 * 1024 * 1024 ? source : null;
+    return sanitizeSvg(serializer.serializeToString(svg))?.source || null;
   }
   async function decode(image, checkStop) {
     let timer;
@@ -12779,17 +14021,17 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
     let canvas, image;
     try {
       checkStop();
-      const key = String(id);
-      if (!/^[\w-]{1,160}$/u.test(key)) return null;
+      const key2 = String(id);
+      if (!/^[\w-]{1,160}$/u.test(key2)) return null;
       const page = document2?.querySelector('[data-block-type="page"]');
-      const block = document2?.querySelector('[data-block-id="' + key + '"]');
+      const block = document2?.querySelector('[data-block-id="' + key2 + '"]');
       const pageId = page?.getAttribute("data-record-id"), recordId = block?.getAttribute("data-record-id");
       const root = pageView?.PageMain?.blockManager?.rootBlockModel;
       if (!pageId || !recordId || !root || root.record?.id !== pageId || block.isConnected === false || block.getAttribute("data-block-type") !== "diagram" || !page.contains(block)) return null;
-      const model = findDiagram(root, key, recordId);
+      const model = findDiagram(root, key2, recordId);
       const view = model?.blockManager?.getBlockViewByBlockId?.(model.id);
       if (typeof view?.getSvg !== "function") return null;
-      const belongsToPage = () => pageView?.PageMain?.blockManager?.rootBlockModel === root && root.record?.id === pageId && document2.querySelector('[data-block-type="page"]') === page && page.getAttribute("data-record-id") === pageId && document2.querySelector('[data-block-id="' + key + '"]') === block && block.isConnected !== false && block.getAttribute("data-record-id") === recordId && page.contains(block) && findDiagram(root, key, recordId) === model && model.blockManager?.getBlockViewByBlockId?.(model.id) === view;
+      const belongsToPage = () => pageView?.PageMain?.blockManager?.rootBlockModel === root && root.record?.id === pageId && document2.querySelector('[data-block-type="page"]') === page && page.getAttribute("data-record-id") === pageId && document2.querySelector('[data-block-id="' + key2 + '"]') === block && block.isConnected !== false && block.getAttribute("data-record-id") === recordId && page.contains(block) && findDiagram(root, key2, recordId) === model && model.blockManager?.getBlockViewByBlockId?.(model.id) === view;
       const browser = document2.defaultView || globalThis, serializer = new browser.XMLSerializer();
       const base = view.getSvg(), size = dimensions(base), original = staticSource(base, serializer);
       if (!size || !original || !belongsToPage()) return null;
@@ -12816,7 +14058,17 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
       checkStop();
       const dataUrl2 = canvas.toDataURL("image/png");
       if (typeof dataUrl2 !== "string" || dataUrl2.length > 32 * 1024 * 1024 + 64 || !/^data:image\/png;base64,[A-Za-z0-9+/]+={0,2}$/u.test(dataUrl2) || !belongsToPage() || staticSource(view.getSvg(), serializer) !== original) return null;
-      return { blockId: id, mime: "image/png", width, height, alt: "流程图", dataUrl: dataUrl2 };
+      const bytes = new TextEncoder().encode(original), parts = [];
+      for (let offset = 0; offset < bytes.length; offset += 16384) parts.push(String.fromCharCode(...bytes.subarray(offset, offset + 16384)));
+      return {
+        blockId: id,
+        mime: "image/svg+xml",
+        width: size.width,
+        height: size.height,
+        alt: "流程图",
+        dataUrl: "data:image/svg+xml;base64," + btoa(parts.join("")),
+        rasterFallback: { mime: "image/png", width, height, dataUrl: dataUrl2 }
+      };
     } catch (error) {
       if (error?.name === "AbortError") throw error;
       return null;
@@ -12928,26 +14180,26 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
       if (styles.has(node)) return styles.get(node);
       if (!canRead(node)) return {};
       const computed = node.ownerDocument.defaultView.getComputedStyle(node);
-      const snapshot = Object.fromEntries(["backgroundColor", "color", "textAlign", "verticalAlign", "direction", "display"].map((key) => [key, computed[key]]));
+      const snapshot = Object.fromEntries(["backgroundColor", "color", "textAlign", "verticalAlign", "direction", "display"].map((key2) => [key2, computed[key2]]));
       styles.set(node, snapshot);
       return snapshot;
     }
     function cellState(cell, html = cell.outerHTML) {
-      let cached = cells.get(cell);
-      if (cached?.html !== html) {
+      let cached2 = cells.get(cell);
+      if (cached2?.html !== html) {
         styles.delete(cell);
         backgrounds.delete(cell);
-        cached = { html };
-        cells.set(cell, cached);
+        cached2 = { html };
+        cells.set(cell, cached2);
       }
-      return cached;
+      return cached2;
     }
     function isHiddenCell(cell) {
       if (cell.hidden || cell.getAttribute?.("hidden") != null || cell.getAttribute?.("aria-hidden") === "true") return true;
       if (!canRead(cell)) return false;
-      const cached = cellState(cell);
-      if (cached.hidden === void 0) cached.hidden = readStyle(cell).display === "none";
-      return cached.hidden;
+      const cached2 = cellState(cell);
+      if (cached2.hidden === void 0) cached2.hidden = readStyle(cell).display === "none";
+      return cached2.hidden;
     }
     function background(node) {
       const layers = [];
@@ -12976,8 +14228,8 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
       isHiddenCell,
       cellHtml(cell, html = cell.outerHTML) {
         if (!canRead(cell)) return html;
-        const cached = cellState(cell, html);
-        if (cached.styled !== void 0) return cached.styled;
+        const cached2 = cellState(cell, html);
+        if (cached2.styled !== void 0) return cached2.styled;
         const style = readStyle(cell), fill = background(cell);
         const lines = [...cell.querySelectorAll(".ace-line")].filter((line) => line.closest("td,th") === cell);
         const lineStyles = lines.map((line) => {
@@ -12998,13 +14250,13 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
         });
         const visibility = cell.style?.display === "none" && style.display && style.display !== "none" && !isHiddenCell(cell) ? ";display:table-cell!important" : "";
         const styled = styledHtml(html, value + visibility);
-        cached.styled = styled;
+        cached2.styled = styled;
         return styled;
       },
       columnWidths(table) {
         if (!canRead(table)) return;
-        const html = table.outerHTML, cached = tables.get(table);
-        if (cached?.html === html) return cached.widths;
+        const html = table.outerHTML, cached2 = tables.get(table);
+        if (cached2?.html === html) return cached2.widths;
         const widths = measuredWidths(table, isHiddenCell);
         tables.set(table, { html, widths });
         return widths;
@@ -13030,7 +14282,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
     const appendText = (text, formatting) => {
       if (!text) return;
       texts.push(text);
-      const key = JSON.stringify([
+      const key2 = JSON.stringify([
         Boolean(formatting.bold),
         Boolean(formatting.italic),
         Boolean(formatting.strike),
@@ -13040,8 +14292,8 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
         formatting.script || ""
       ]);
       const last = tokens.at(-1);
-      if (last?.format === key) last.text += text;
-      else tokens.push({ format: key, text });
+      if (last?.format === key2) last.text += text;
+      else tokens.push({ format: key2, text });
     };
     const visit = (node, formatting = {}, depth = 0) => {
       if (node.nodeName === "#text") {
@@ -13067,7 +14319,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
       if (tag === "code") next.code = true;
       if (tag === "sup" || tag === "sub") next.script = tag;
       if (tag === "br") appendText("\n", next);
-      const shape = ["rowspan", "colspan", "start"].flatMap((key) => attrs.has(key) ? [[key, attrs.get(key)]] : []);
+      const shape = ["rowspan", "colspan", "start"].flatMap((key2) => attrs.has(key2) ? [[key2, attrs.get(key2)]] : []);
       if (shape.length) tokens.push({ shape });
       for (const child of node.childNodes || []) visit(child, next, depth + 1);
     };
@@ -13095,6 +14347,24 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
   }
   function formatRange(start, end) {
     return start === end ? String(start) : start + "–" + end;
+  }
+  function findChildRegion(node, blockId, slotClass) {
+    const attrs = node.attrs || [];
+    const id = attrs.find((attr3) => attr3.name === "data-block-id")?.value;
+    if (id && id !== blockId) return null;
+    const classes = attrs.find((attr3) => attr3.name === "class")?.value.split(/\s+/u) || [];
+    if (classes.includes(slotClass)) return node;
+    for (const child of node.childNodes || []) {
+      const found = findChildRegion(child, blockId, slotClass);
+      if (found) return found;
+    }
+    return null;
+  }
+  function hasOwnLine(node, blockId) {
+    const attrs = node.attrs || [];
+    if (attrs.some((attr3) => attr3.name === "data-block-id" && attr3.value !== blockId)) return false;
+    if (attrs.some((attr3) => attr3.name === "class" && attr3.value.split(/\s+/u).includes("ace-line"))) return true;
+    return (node.childNodes || []).some((child) => hasOwnLine(child, blockId));
   }
   function collectStep(scroller, ratio2, sampleCode, sampleTable, sampleBlock) {
     const fresh = [];
@@ -13144,6 +14414,9 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
     const source = readDocumentSource();
     if (!source.ready) throw new Error(source.reason);
     const scroller = document.querySelector(".bear-web-x-container");
+    const pageView = typeof unsafeWindow === "undefined" ? globalThis : unsafeWindow;
+    const initialModel = readPageModel({ document, pageView });
+    const nativeCache = /* @__PURE__ */ new Map();
     report({ stage: "prepare", message: "准备采集：" + source.title });
     const originalPath = location.pathname;
     const originalScroll = scroller.scrollTop;
@@ -13157,9 +14430,9 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
     let adaptiveWaitMs = 0;
     let referenceSteps = 0, referenceRegions = 0;
     function contentChanged(id, type) {
-      const key = type + ":" + id;
-      if (changed.has(key)) return;
-      changed.add(key);
+      const key2 = type + ":" + id;
+      if (changed.has(key2)) return;
+      changed.add(key2);
       warnings2.push({ code: "capture_content_changed", label: type + " " + id + " 在采集期间发生变化，结果可能包含不同时刻的内容，请重新保存核对。" });
     }
     try {
@@ -13226,9 +14499,9 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
           for (const cell of row.cells) {
             if (tableStyles.isHiddenCell(cell)) continue;
             const col = keys.length;
-            const key = cell.getAttribute("data-block-id") || cell.getAttribute("data-record-id") || rowNum + ":" + col;
-            keys.push(key);
-            const previous = state.cells.get(key);
+            const key2 = cell.getAttribute("data-block-id") || cell.getAttribute("data-record-id") || rowNum + ":" + col;
+            keys.push(key2);
+            const previous = state.cells.get(key2);
             const length = cleanText3(cell.textContent).length;
             const parts = [...cell.querySelectorAll("[data-block-type]")];
             const ready = parts.length ? parts.every((part) => {
@@ -13249,17 +14522,17 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
             if (previous?.ready && !ready) continue;
             const html = tableStyles.cellHtml(cell);
             if (previous?.html === html && previous.ready === ready) continue;
-            const semantic = ready ? semanticContent(html, true) : null;
-            if (previous?.ready && ready && previous.semantic && semantic && semantic.text.trim() && semantic.fingerprint !== previous.semantic.fingerprint && length <= previous.length && !semantic.nested && !previous.semantic.nested) {
-              if (length === previous.length) contentChanged(key, "表格单元格");
+            const semantic2 = ready ? semanticContent(html, true) : null;
+            if (previous?.ready && ready && previous.semantic && semantic2 && semantic2.text.trim() && semantic2.fingerprint !== previous.semantic.fingerprint && length <= previous.length && !semantic2.nested && !previous.semantic.nested) {
+              if (length === previous.length) contentChanged(key2, "表格单元格");
               else continue;
             }
             if (!previous || !previous.ready && ready || previous.ready === ready && length >= previous.length) {
-              state.cells.set(key, { rowNum: rowNum + (section === "thead" ? headerCount : auxiliaryCount), col, ready, length, center, html, semantic });
+              state.cells.set(key2, { rowNum: rowNum + (section === "thead" ? headerCount : auxiliaryCount), col, ready, length, center, html, semantic: semantic2 });
             }
           }
           const existing = state.rows.get(rowNum);
-          if (!existing || existing.section !== section || keys.length >= existing.keys.length && keys.some((key, i) => existing.keys[i] !== key)) {
+          if (!existing || existing.section !== section || keys.length >= existing.keys.length && keys.some((key2, i) => existing.keys[i] !== key2)) {
             const shell = row.cloneNode(false).outerHTML;
             state.rows.set(rowNum, { keys, shell, section });
           }
@@ -13285,9 +14558,9 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
         const groups = /* @__PURE__ */ new Map();
         const placed = /* @__PURE__ */ new Set();
         for (const [, row] of [...state.rows].sort((a, b) => a[0] - b[0])) {
-          const cells = row.keys.map((key) => {
-            placed.add(key);
-            return state.cells.get(key).html;
+          const cells = row.keys.map((key2) => {
+            placed.add(key2);
+            return state.cells.get(key2).html;
           }).join("");
           const markup = row.shell.replace(/<\/tr>$/iu, () => cells + "</tr>");
           if (!groups.has(row.section)) groups.set(row.section, []);
@@ -13303,7 +14576,9 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
         block.html = serialize(fragment);
       }, sampleBlock = function(el) {
         const id = el.getAttribute("data-block-id");
+        if (!/^[\w-]{1,160}$/u.test(id || "")) return null;
         const type = el.getAttribute("data-block-type") || "";
+        if (type === "file" && !attemptedFiles.has(id)) pendingFiles.add(id);
         if (type === "image") {
           const state = readImageState(el);
           if (!observedImages.has(id) || !sameImageState(observedImages.get(id), state)) pendingImages.add(id);
@@ -13314,13 +14589,13 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
         if (stored?.observedHtml === html) return null;
         if (stored) stored.observedHtml = html;
         const score = scoreOf(el);
-        const semantic = !CONTAINER_TYPES.has(type) ? semanticContent(html) : null;
+        const semantic2 = !CONTAINER_TYPES.has(type) ? semanticContent(html) : null;
         const parent = el.parentElement?.closest("[data-block-id]");
-        const block = { id, type, parentId: parent && parent !== el ? parent.getAttribute("data-block-id") : "", html, observedHtml: html, score, semantic };
+        const block = { id, type, recordId: el.getAttribute("data-record-id") || "", parentId: parent && parent !== el ? parent.getAttribute("data-block-id") : "", html, observedHtml: html, score, semantic: semantic2 };
         if (!stored) return { fresh: true, block };
         const previous = stored.semantic;
-        const equalContentSize = semantic && previous && semantic.text.trim() && previous.text.trim() && semantic.text.length === previous.text.length && !semantic.nested && !previous.nested;
-        if (equalContentSize && semantic.fingerprint !== previous.fingerprint) {
+        const equalContentSize = semantic2 && previous && semantic2.text.trim() && previous.text.trim() && semantic2.text.length === previous.text.length && !semantic2.nested && !previous.nested;
+        if (equalContentSize && semantic2.fingerprint !== previous.fingerprint) {
           contentChanged(id, "正文块");
           return { block };
         }
@@ -13368,10 +14643,18 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
           if (zone?.lastElementChild?.contains(last.row)) data.confirmedEnd = last.num;
         }
         return data.lines.size - before;
+      }, modelOrder = function(children, parentId) {
+        if (!modelStructureReady) return false;
+        const expected = parentId === pageId ? semantic?.roots : semanticById.get(parentId)?.children;
+        if (!expected) return false;
+        const order = new Map(expected.map((id, index) => [id, index]));
+        if (!children.every((block) => order.has(block.id))) return false;
+        children.sort((a, b) => order.get(a.id) - order.get(b.id));
+        return true;
       }, refreshRoots = function() {
         roots.length = 0;
         for (const block of blocks.values()) if (block.parentId === pageId) roots.push(block);
-        if (roots.every(hasNumericId)) roots.sort((a, b) => Number(a.id) - Number(b.id));
+        if (!modelOrder(roots, pageId) && roots.every(hasNumericId)) roots.sort((a, b) => Number(a.id) - Number(b.id));
       }, insideReference = function(block, id) {
         if (block.id === id) return false;
         let parent = block.parentId;
@@ -13393,12 +14676,20 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
             if (lines?.size) ready = true;
           } else if (block.type === "table") {
             const cells = tables.get(block.id)?.cells;
-            content = cells ? JSON.stringify([...cells].map(([key, cell]) => [key, cell.ready, cell.semantic?.fingerprint])) : "";
+            content = cells ? JSON.stringify([...cells].map(([key2, cell]) => [key2, cell.ready, cell.semantic?.fingerprint])) : "";
             if (cells?.size) ready = true;
           } else if (!CONTAINER_TYPES.has(block.type) && block.semantic?.text.trim() || ["image", "whiteboard", "diagram"].includes(block.type) && images.some((image) => image.blockId === block.id) || block.type === "whiteboard" && isWhiteboardReady(document.querySelector('[data-block-id="' + block.id + '"]')) || /\bisEmpty\b/u.test(block.html)) ready = true;
           descendants.push([block.id, block.parentId, block.type, content]);
         }
         return { signature: JSON.stringify(descendants), ready };
+      }, readBoundModel = function() {
+        const snapshot = readPageModel({ document, pageView });
+        if (!snapshot || snapshot.rootId !== pageId || snapshot.recordId !== source.docToken) return null;
+        for (const block of snapshot.blocks) {
+          const saved = blocks.get(block.id);
+          if (saved && (saved.type !== block.type || saved.recordId !== block.recordId)) return null;
+        }
+        return snapshot;
       }, rebuildChildren = function(block, visiting = /* @__PURE__ */ new Set()) {
         if (rebuiltChildren.has(block.id) || visiting.has(block.id)) return;
         const children = childrenByParent.get(block.id) || [];
@@ -13408,35 +14699,19 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
         for (const child of children) rebuildChildren(child, visiting);
         visiting.delete(block.id);
         const fragment = parseFragment(block.html);
-        function findChildren(node) {
-          const attrs = node.attrs || [];
-          const id = attrs.find((attr3) => attr3.name === "data-block-id")?.value;
-          if (id && id !== block.id) return null;
-          const classes = attrs.find((attr3) => attr3.name === "class")?.value.split(/\s+/u) || [];
-          if (classes.includes(slotClass)) return node;
-          for (const child of node.childNodes || []) {
-            const found = findChildren(child);
-            if (found) return found;
-          }
-          return null;
-        }
+        const findChildren = (node) => findChildRegion(node, block.id, slotClass);
         const slot = findChildren(fragment);
         if (!slot) {
           warnings2.push({ code: "missing_block", label: childLabel(block) + block.id + " 未找到嵌套内容容器，未能确认子项位置。" });
           return;
         }
-        function hasOwnLine(node) {
-          const attrs = node.attrs || [];
-          if (attrs.some((attr3) => attr3.name === "data-block-id" && attr3.value !== block.id)) return false;
-          if (attrs.some((attr3) => attr3.name === "class" && attr3.value.split(/\s+/u).includes("ace-line"))) return true;
-          return (node.childNodes || []).some(hasOwnLine);
-        }
-        if (hasOwnLine(slot)) {
+        if (hasOwnLine(slot, block.id)) {
           warnings2.push({ code: "missing_block", label: childLabel(block) + block.id + " 的自身文字与子项容器混合，未能确认子项位置。" });
           return;
         }
         let ordered = [...children];
-        if (block.type === "grid") {
+        if (modelOrder(ordered, block.id)) {
+        } else if (block.type === "grid") {
           let columnOrder = function(markup) {
             const ids = [];
             function visit(node) {
@@ -13521,7 +14796,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
         try {
           const index = images.findIndex((image2) => image2.blockId === id);
           const saved = index < 0 ? void 0 : { image: images[index], state: imageStates.get(id) };
-          const { image, state } = await captureLoadedImage(id, { wait, checkStop, saved });
+          const { image, state } = await captureLoadedImage(id, { wait, checkStop, saved, pageView, cache: nativeCache });
           if (index < 0) images.push(image);
           else images[index] = image;
           imageStates.set(id, state);
@@ -13538,11 +14813,28 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
       const positions = /* @__PURE__ */ new Map();
       const codeBlocks = /* @__PURE__ */ new Map();
       const images = [];
+      const attachments = /* @__PURE__ */ new Map(), pendingFiles = /* @__PURE__ */ new Set();
+      let attachmentBytes = 0;
+      const attemptedFiles = /* @__PURE__ */ new Set();
       const failedImages = /* @__PURE__ */ new Set();
       const whiteboardErrors = /* @__PURE__ */ new Map();
       const diagramErrors = /* @__PURE__ */ new Map();
       const imageStates = /* @__PURE__ */ new Map(), observedImages = /* @__PURE__ */ new Map(), pendingImages = /* @__PURE__ */ new Set(), imageErrors = /* @__PURE__ */ new Map();
       async function collectImages(snap) {
+        for (const id of [...pendingFiles]) {
+          pendingFiles.delete(id);
+          attemptedFiles.add(id);
+          if (attachmentBytes >= 48 * 1024 * 1024 || attachments.size >= 128) continue;
+          try {
+            const attachment = await readNativeAttachment(id, { document, pageView, checkStop, cache: nativeCache });
+            if (attachment && attachmentBytes + attachment.bytes.length <= 48 * 1024 * 1024) {
+              attachments.set(id, attachment);
+              attachmentBytes += attachment.bytes.length;
+            }
+          } catch (error) {
+            if (error.name === "AbortError") throw error;
+          }
+        }
         for (const block of snap.fresh) {
           if (block.type === "whiteboard" && !images.some((image) => image.blockId === block.id)) {
             if (!await captureImage(block.id)) failedImages.add(block.id);
@@ -13590,6 +14882,8 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
       const pageId = pageBlock ? pageBlock.id : "1";
       const roots = [...blocks.values()].filter((block) => block.parentId === pageId);
       if (!roots.length) throw new Error("没有采集到文档内容，请刷新页面后重试");
+      let semantic = null, semanticById = /* @__PURE__ */ new Map(), modelStructureReady = false;
+      const sourceFallbackIds = /* @__PURE__ */ new Set();
       const tryAt = async (id, scrollTop) => {
         checkStop();
         const maxTop = scroller.scrollHeight - scroller.clientHeight;
@@ -13671,6 +14965,34 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
       for (const id of failedImages) {
         if (blocks.get(id)?.type !== "diagram") continue;
         if (await revealBlock(id, positions.get(id)) && await captureImage(id)) failedImages.delete(id);
+      }
+      const modelForRecheck = readBoundModel();
+      if (modelForRecheck) {
+        let rechecks = 0;
+        const expected = new Map(modelForRecheck.blocks.map((block) => [block.id, block]));
+        const anchors = /* @__PURE__ */ new Map(), visitedParents = /* @__PURE__ */ new Set();
+        for (const block of modelForRecheck.blocks) {
+          if (blocks.has(block.id) || rechecks >= 12) continue;
+          const siblings = block.parentId === pageId ? modelForRecheck.roots : expected.get(block.parentId)?.children || [];
+          if (!visitedParents.has(block.parentId)) {
+            visitedParents.add(block.parentId);
+            let previous = block.parentId;
+            for (const id of siblings) {
+              if (positions.has(id)) previous = id;
+              anchors.set(id, previous);
+            }
+            let next = null;
+            for (let index = siblings.length - 1; index >= 0; index--) {
+              const id = siblings[index];
+              if (positions.has(id)) next = id;
+              if (next) anchors.set(id, next);
+            }
+          }
+          const anchor = anchors.get(block.id);
+          if (!positions.has(anchor)) continue;
+          rechecks++;
+          if (await tryAt(anchor, positions.get(anchor) * scroller.scrollHeight - scroller.clientHeight / 2)) await collectAtCurrentPosition();
+        }
       }
       async function auditReference(reference) {
         checkStop();
@@ -13938,6 +15260,51 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
         const refreshed = sampleBlock(el);
         if (refreshed) Object.assign(blocks.get(block.id), refreshed.block);
       }
+      semantic = readBoundModel();
+      const boundInitial = initialModel?.rootId === pageId && initialModel.recordId === source.docToken ? initialModel : null;
+      if (boundInitial && (!semantic || boundInitial.recordId !== semantic.recordId || boundInitial.rootId !== semantic.rootId)) {
+        contentChanged(pageId, "正文结构");
+      }
+      if (semantic) {
+        semanticById = new Map(semantic.blocks.map((block) => [block.id, block]));
+        modelStructureReady = !semantic.warnings.some((warning) => warning.code === "missing_block");
+        const before = new Map((boundInitial?.blocks || []).map((block) => [block.id, block]));
+        for (const block of semantic.blocks) {
+          const previous = before.get(block.id);
+          if (previous?.ready && block.ready && JSON.stringify(previous) !== JSON.stringify(block)) contentChanged(block.id, "正文源块");
+        }
+        if (boundInitial && JSON.stringify(boundInitial.roots) !== JSON.stringify(semantic.roots)) contentChanged(pageId, "正文结构");
+        const sourceTypes = /* @__PURE__ */ new Set(["text", "heading1", "heading2", "heading3", "heading4", "heading5", "heading6", "bullet", "ordered", "todo", "code", "divider", "isv"]);
+        const slots = { bullet: "list-children", ordered: "list-children", callout: "callout-block-children", grid: "grid-block", grid_column: "grid-column-block" };
+        const validSlots = /* @__PURE__ */ new Map();
+        const missing = [];
+        for (const block of semantic.blocks) {
+          if (blocks.has(block.id)) continue;
+          const parent = blocks.get(block.parentId);
+          if (parent && slots[parent.type] && !validSlots.has(parent.id)) {
+            const region = findChildRegion(parseFragment(parent.html), parent.id, slots[parent.type]);
+            validSlots.set(parent.id, Boolean(region && !hasOwnLine(region, parent.id)));
+          }
+          const canPlace = block.parentId === pageId || validSlots.get(parent?.id) === true;
+          const hasSource = block.type === "divider" || typeof block.text === "string" || block.ops?.length || block.source || block.timeline;
+          if (!modelStructureReady || !block.ready || !sourceTypes.has(block.type) || !canPlace || !hasSource) {
+            missing.push(block.id);
+            continue;
+          }
+          const slot = slots[block.type];
+          const html = '<div data-block-id="' + block.id + '" data-block-type="' + block.type + '" data-export-semantic-only="1">' + (slot ? '<div class="' + slot + '"></div>' : "") + "</div>";
+          blocks.set(block.id, { id: block.id, type: block.type, parentId: block.parentId, recordId: block.recordId, html, semanticOnly: true });
+          sourceFallbackIds.add(block.id);
+        }
+        if (missing.length) warnings2.push({ code: "missing_block", label: "正文模型中 " + missing.length + " 个块未能完整采集：" + missing.slice(0, 20).join("、") + (missing.length > 20 ? "…" : "") });
+        refreshRoots();
+      }
+      for (const block of blocks.values()) {
+        if (block.type !== "file" || attachments.has(block.id)) continue;
+        if (!document.querySelector('[data-block-id="' + block.id + '"]') && !await tryAt(block.id, (positions.get(block.id) || 0) * scroller.scrollHeight - scroller.clientHeight / 2)) continue;
+        pendingFiles.add(block.id);
+      }
+      await collectImages({ fresh: [] });
       const childrenByParent = /* @__PURE__ */ new Map();
       for (const block of blocks.values()) {
         if (!childrenByParent.has(block.parentId)) childrenByParent.set(block.parentId, []);
@@ -13977,7 +15344,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
           warnings2.push({ code: "missing_block", label: "内嵌页面 " + page.id + " 未找到正文容器，未能合并已采集的内容。" });
           continue;
         }
-        if (children.every(hasNumericId)) children.sort((a, b) => Number(a.id) - Number(b.id));
+        if (!modelOrder(children, page.id) && children.every(hasNumericId)) children.sort((a, b) => Number(a.id) - Number(b.id));
         const rebuilt = parseFragment(children.map((child) => child.html).join(""));
         body.childNodes = rebuilt.childNodes;
         for (const child of body.childNodes) child.parentNode = body;
@@ -14028,6 +15395,21 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
           }
         }
       }
+      if (sourceFallbackIds.size) {
+        const placed = /* @__PURE__ */ new Set();
+        for (const root of roots) {
+          const pending = [...parseFragment(root.html).childNodes];
+          while (pending.length) {
+            const node = pending.pop();
+            const id = node.attrs?.find((attr3) => attr3.name === "data-block-id")?.value;
+            if (sourceFallbackIds.has(id)) placed.add(id);
+            for (const child of node.childNodes || []) pending.push(child);
+          }
+        }
+        if (placed.size) warnings2.push({ code: "source_fallback", label: "已从本页源结构补全 " + placed.size + " 个未挂载正文块，请核对外观。" });
+        const unplaced = [...sourceFallbackIds].filter((id) => !placed.has(id));
+        if (unplaced.length) warnings2.push({ code: "missing_block", label: "源结构补偿的 " + unplaced.length + " 个块未能写入导出正文：" + unplaced.slice(0, 20).join("、") + (unplaced.length > 20 ? "…" : "") });
+      }
       const knownRootTypes = /* @__PURE__ */ new Set([
         "heading1",
         "heading2",
@@ -14052,7 +15434,8 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
         "todo",
         "grid",
         "grid_column",
-        "file"
+        "file",
+        "isv"
       ]);
       for (const type of new Set(roots.map((block) => block.type))) {
         if (!knownRootTypes.has(type)) warnings2.push({ code: "unsupported_block", label: "未适配的块类型：" + type });
@@ -14067,12 +15450,14 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
         generator: "feishu-local-exporter 油猴页面采集",
         source: { ...source, capturedAt: (/* @__PURE__ */ new Date()).toISOString() },
         pageBlockId: pageId,
-        blocks: roots.map(({ id, type, html }) => ({ id, type, html })),
+        blocks: roots.map(({ id, type, html, semanticOnly }) => ({ id, type, html, ...semanticOnly ? { semanticOnly: true } : {} })),
         code: Object.fromEntries([...codeBlocks].map(([id, data]) => {
           const lines = [...data.lines].sort((a, b) => a[0] - b[0]).map(([num, text]) => ({ num, text }));
           return [id, data.confirmedEnd ? { lines, totalLines: data.confirmedEnd } : { lines }];
         })),
         images,
+        attachments: [...attachments.values()],
+        ...semantic ? { semantic } : {},
         warnings: warnings2
       };
     } finally {
@@ -14172,8 +15557,8 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
     return { rgb: channels.map((channel) => Math.min(255, Math.max(0, channel))), alpha: Math.min(1, Math.max(0, alpha)) };
   }
   function opaque(value) {
-    const parsed = color(value);
-    return parsed?.alpha >= 0.95 ? parsed.rgb.map(Math.round) : null;
+    const parsed2 = color(value);
+    return parsed2?.alpha >= 0.95 ? parsed2.rgb.map(Math.round) : null;
   }
   function hex2(rgb) {
     return "#" + rgb.map((channel) => Math.round(channel).toString(16).padStart(2, "0")).join("");
@@ -14317,8 +15702,8 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
       host.setAttribute?.("data-theme", theme.mode);
       if (host.style) {
         host.style.colorScheme = theme.mode;
-        for (const [key, value] of Object.entries(theme)) {
-          if (key !== "mode") host.style.setProperty?.("--fle-" + key, value);
+        for (const [key2, value] of Object.entries(theme)) {
+          if (key2 !== "mode") host.style.setProperty?.("--fle-" + key2, value);
         }
       }
     }
@@ -14334,6 +15719,44 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
     }
     refresh();
     return { refresh };
+  }
+
+  // src/userscript/download.js
+  function downloadFile(view, blob, filename) {
+    let url, link, event, scheduled = false;
+    const observe = (received) => {
+      event = received;
+    };
+    const revoke = () => {
+      try {
+        view.URL.revokeObjectURL(url);
+      } catch {
+      }
+    };
+    try {
+      url = view.URL.createObjectURL(blob);
+      link = view.document.createElement("a");
+      link.href = url;
+      link.download = filename;
+      link.addEventListener("click", observe, { once: true });
+      view.document.body.append(link);
+      link.click();
+      if (!event || event.defaultPrevented) {
+        throw Object.assign(new Error("页面取消或阻止了下载，请检查文档权限或浏览器下载设置后重试。"), { code: "download_blocked" });
+      }
+      view.setTimeout(revoke, 6e4);
+      scheduled = true;
+    } finally {
+      try {
+        link?.removeEventListener("click", observe);
+      } catch {
+      }
+      try {
+        link?.remove();
+      } catch {
+      }
+      if (url && !scheduled) revoke();
+    }
   }
 
   // src/userscript/entry.js
@@ -14357,7 +15780,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
     let previousToken = "", previousRoot = null, waitStarted = 0, waitingTimer = null;
     let source, ready = false, chooserOpen = false, cardOpen = false;
     let task = null, snapshot = null, snapshotOwner = null, result = null, pdfNotes = [];
-    let lastRun = null, failed = false, noticeId = 0, mode = "fresh";
+    let lastRun = null, pendingDownload = null, failed = false, noticeId = 0, mode = "fresh";
     let snapshotAt = "", outcome = "idle", unreadNotice = false, pointerInside = false;
     let keyboardMode = false, visible = false, visibilityAnimation = null, screen = "";
     let launcherState = "", drag = null, suppressClick = false, position = 0.62;
@@ -14366,14 +15789,14 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
       if (stored > 0 && stored < 1) position = stored;
     } catch {
     }
-    function element(tag, key, text) {
+    function element(tag, key2, text) {
       const el = document2.createElement(tag);
-      if (key) el.id = prefix + key;
+      if (key2) el.id = prefix + key2;
       if (text) el.textContent = text;
       return el;
     }
-    function button(key, text, action) {
-      const el = element("button", key, text);
+    function button(key2, text, action) {
+      const el = element("button", key2, text);
       el.type = "button";
       el.addEventListener("click", action);
       return el;
@@ -14514,11 +15937,8 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
         status.textContent = "正在取消…";
       }
     });
-    const retry = button("retry", "重试", () => run(lastRun?.reuse || false, lastRun?.kinds));
-    const redownload = button("redownload", "重新下载此文件", () => {
-      syncPage();
-      if (result && !task && belongsToPage(snapshotOwner)) download(result.blob, result.filename);
-    });
+    const retry = button("retry", "重试", () => pendingDownload ? retryDownload(pendingDownload) : run(lastRun?.reuse || false, lastRun?.kinds));
+    const redownload = button("redownload", "重新下载此文件", () => retryDownload(result));
     redownload.className = "quiet";
     cancel.className = "quiet";
     actions.append(dismiss, cancel, retry);
@@ -14707,6 +16127,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
       result = null;
       pdfNotes = [];
       lastRun = null;
+      pendingDownload = null;
       failed = false;
       outcome = "idle";
       unreadNotice = false;
@@ -14719,22 +16140,22 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
     function syncPage() {
       theme.refresh();
       source = readSource();
-      const key = source.key || "";
+      const key2 = source.key || "";
       const root = document2.querySelector?.('[data-block-type="page"], .page-block');
       const token = source.docToken || "";
-      if (key !== pageKey) {
+      if (key2 !== pageKey) {
         if (task) task.cancelled = true;
         previousToken = documentToken;
         previousRoot = currentRoot;
         waitStarted = Date.now();
-        pageKey = key;
+        pageKey = key2;
         documentToken = "";
         currentRoot = null;
         cardOpen = false;
         noticeId++;
         clearResult();
       }
-      if (snapshotOwner && snapshotOwner.token !== token || task?.key === key && task.token !== token) {
+      if (snapshotOwner && snapshotOwner.token !== token || task?.key === key2 && task.token !== token) {
         if (task) task.cancelled = true;
         noticeId++;
         clearResult();
@@ -14742,7 +16163,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
       }
       const rootReplaced = Boolean(previousRoot && root && previousRoot !== root);
       const waitingForPrevious = Boolean(previousToken && (!token || token === previousToken) && !rootReplaced);
-      ready = Boolean(key) && source.ready !== false && !source.unsupported && !waitingForPrevious;
+      ready = Boolean(key2) && source.ready !== false && !source.unsupported && !waitingForPrevious;
       if (ready) {
         previousToken = "";
         previousRoot = null;
@@ -14769,15 +16190,40 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
       await new Promise((resolve) => view.setTimeout(resolve, 0));
       check(op);
     }
-    function download(blob, filename) {
-      const url = view.URL.createObjectURL(blob);
-      const link = element("a");
-      link.href = url;
-      link.download = filename;
-      document2.body.append(link);
-      link.click();
-      link.remove();
-      view.setTimeout(() => view.URL.revokeObjectURL(url), 6e4);
+    function retryDownload(file) {
+      syncPage();
+      if (!file || task || !belongsToPage(snapshotOwner)) return;
+      noticeId++;
+      chooserOpen = false;
+      cardOpen = true;
+      history.open = true;
+      const documentPending = Boolean(result && pendingDownload === result);
+      try {
+        downloadFile(view, file.blob, file.filename);
+        if (file !== result && documentPending) {
+          status.textContent = "提示文件已交给浏览器保存。文档文件尚未交给浏览器，请重试下载。";
+        } else {
+          pendingDownload = null;
+          failed = false;
+          const partial = warningLines().length > 0;
+          outcome = partial ? "partial" : "success";
+          unreadNotice = partial;
+          heading.textContent = partial ? "部分保存，请核对" : "文件已生成";
+          status.textContent = partial ? "部分保存。已交给浏览器保存，请查看内容提示。" : "已交给浏览器保存。";
+          if (file !== result) {
+            heading.textContent = "提示文件已生成";
+            status.textContent = "提示文件已交给浏览器保存。";
+          }
+        }
+      } catch (error) {
+        if (!documentPending || file === result) pendingDownload = file;
+        failed = true;
+        outcome = "failed";
+        unreadNotice = true;
+        heading.textContent = "保存失败";
+        status.textContent = "保存失败：" + error.message + "已生成的文件仍可重试下载。";
+      }
+      controls();
     }
     function warningLines() {
       return [...(snapshot?.warnings || []).map(({ code, label }) => warningLabel(code) + (label ? " · " + label : "")), ...pdfNotes];
@@ -14795,7 +16241,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
         button("report", "下载完整提示", () => {
           syncPage();
           if (snapshot && !task && belongsToPage(snapshotOwner)) {
-            download(new Blob([warningLines().join("\n") + "\n"], { type: "text/plain;charset=utf-8" }), safeStem(snapshot.title) + "-保存提示.txt");
+            retryDownload({ blob: new Blob([warningLines().join("\n") + "\n"], { type: "text/plain;charset=utf-8" }), filename: safeStem(snapshot.title) + "-保存提示.txt" });
           }
         })
       );
@@ -14829,16 +16275,31 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
       status.textContent = "正在整理正文和素材…";
       bar.removeAttribute("value");
       await yieldForCancel(op);
-      const converted = convertCapture(raw);
       const assets = [];
-      for (const image of raw.images) {
-        const data = /^data:image\/png;base64,(.+)$/u.exec(image.dataUrl || "");
-        if (!data) continue;
-        const binary = atob(data[1]);
+      function imageData(image) {
+        const data = /^data:(image\/(?:png|jpeg|gif|webp|svg\+xml));base64,(.+)$/iu.exec(image?.dataUrl || "");
+        if (!data) return null;
+        const binary = atob(data[2]);
         const bytes = new Uint8Array(binary.length);
         for (let i = 0; i < bytes.length; i++) bytes[i] = binary.charCodeAt(i);
-        assets.push({ path: imageHtmlPath(image), bytes });
+        return { mime: data[1].toLowerCase(), bytes };
       }
+      const images = raw.images.map((image) => {
+        const data = imageData(image);
+        if (!data) return image;
+        const normalized = { ...image, mime: data.mime };
+        const fallback = imageData(image.rasterFallback);
+        assets.push({
+          path: imageHtmlPath(normalized),
+          bytes: data.bytes,
+          ...fallback ? { rasterFallback: { bytes: fallback.bytes } } : {}
+        });
+        return normalized;
+      });
+      for (const attachment of raw.attachments || []) {
+        if (attachment?.bytes instanceof Uint8Array) assets.push({ path: attachmentHtmlPath(attachment), bytes: attachment.bytes });
+      }
+      const converted = convertCapture({ ...raw, images });
       const next = await readDocumentParts({ html: converted.html, assets, name: "capture" });
       check(op);
       return next;
@@ -14851,6 +16312,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
       const op = { key: pageKey, token: documentToken, cancelled: false };
       task = op;
       lastRun = { reuse, kinds: [...kinds] };
+      pendingDownload = null;
       failed = false;
       outcome = "idle";
       unreadNotice = false;
@@ -14903,7 +16365,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
         pdfNotes = (pdf?.notes || []).map((note) => warningLabel("pdf_conversion_note") + " · " + note);
         showResult(next);
         showWarnings();
-        download(next.blob, next.filename);
+        downloadFile(view, next.blob, next.filename);
         const partial = warningLines().length > 0;
         outcome = partial ? "partial" : "success";
         unreadNotice = partial;
@@ -14932,7 +16394,8 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
           history.open = true;
           heading.textContent = failed ? "保存失败" : "已取消";
           status.textContent = failed ? "保存失败：" + error.message : "保存已取消。";
-          if (result) status.textContent += "上次保存的文件仍可下载。";
+          if (error.code === "download_blocked") pendingDownload = result;
+          if (result) status.textContent += pendingDownload ? "已生成的文件仍可重试下载。" : "上次保存的文件仍可下载。";
           showWarnings();
         }
       } finally {

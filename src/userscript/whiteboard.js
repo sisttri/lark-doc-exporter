@@ -1,4 +1,5 @@
 import {renderNativeWhiteboard} from './whiteboard-native.js';
+import {readIsolatedWhiteboard} from './whiteboard-isolated.js';
 
 const CONTENT_CANVAS = '.whiteboad-x-content-canvas canvas.whiteboad-x-normal-canvas';
 const BLOCK_VIEW = '.whiteboard-view-container.is-block';
@@ -169,6 +170,9 @@ export async function captureWhiteboardPreview(id, {document = globalThis.docume
   const native = await renderNativeWhiteboard(id,{document,pageView,checkStop,background:backgroundOf(source,block),
     waitForReady:async () => Boolean(await waitForStableCanvas(id,document,wait,checkStop))});
   if (native) return native;
+  const isolated = await readIsolatedWhiteboard(id,{document,pageView,checkStop,
+    waitForReady:async () => Boolean(await waitForStableCanvas(id,document,wait,checkStop))});
+  if (isolated) return isolated;
   const plan = source && redrawPlan(block,source);
   const box = source.getBoundingClientRect();
   const limited = Boolean(plan) || Math.min(source.width/box.width,source.height/box.height) < 2;

@@ -1,12 +1,14 @@
 // 飞书 Wiki 页面内采集逻辑（在油猴脚本的页面上下文中运行）。
 // 读取当前页面 DOM、已加载图片与画板场景，图形优先由本页本地渲染器输出。
-// 不自行调用飞书网络接口或 CLI，不上传文档内容。
+// 素材仅通过本页原生能力及已验证的下载地址读取，不上传文档内容。
 import { parseFragment, serialize } from "parse5";
 import { readDocumentSource } from './source.js';
 import { captureWhiteboardPreview, findWhiteboardCanvas, isWhiteboardReady } from './whiteboard.js';
 import { captureLoadedImage, readImageState, sameImageState } from './image.js';
 import { captureDiagram } from './diagram.js';
 import { createTableStyleCapture } from './table.js';
+import { readPageModel } from './model.js';
+import { readNativeAttachment } from './native-media.js';
 import { columnGroupHtml, isAuxiliaryTable, logicalTableRows } from '../table-style.js';
 export { readDocumentSource } from './source.js';
 
@@ -90,6 +92,26 @@ function formatRange(start, end) {
   return start === end ? String(start) : start + "–" + end;
 }
 
+function findChildRegion(node, blockId, slotClass) {
+  const attrs = node.attrs || [];
+  const id = attrs.find(attr => attr.name === 'data-block-id')?.value;
+  if (id && id !== blockId) return null;
+  const classes = attrs.find(attr => attr.name === 'class')?.value.split(/\s+/u) || [];
+  if (classes.includes(slotClass)) return node;
+  for (const child of node.childNodes || []) {
+    const found = findChildRegion(child,blockId,slotClass);
+    if (found) return found;
+  }
+  return null;
+}
+
+function hasOwnLine(node, blockId) {
+  const attrs = node.attrs || [];
+  if (attrs.some(attr => attr.name === 'data-block-id' && attr.value !== blockId)) return false;
+  if (attrs.some(attr => attr.name === 'class' && attr.value.split(/\s+/u).includes('ace-line'))) return true;
+  return (node.childNodes || []).some(child => hasOwnLine(child,blockId));
+}
+
 // 一次滚动步：收集新出现的块 / 更完整的块 / 代码行，返回滚动前状态。
 function collectStep(scroller, ratio, sampleCode, sampleTable, sampleBlock) {
   const fresh = [];
@@ -136,6 +158,9 @@ export async function capturePage({ stepRatio = 0.6, dwellMs, maxSteps = 400, on
   const source = readDocumentSource();
   if (!source.ready) throw new Error(source.reason);
   const scroller = document.querySelector(".bear-web-x-container");
+  const pageView = typeof unsafeWindow === 'undefined' ? globalThis : unsafeWindow;
+  const initialModel = readPageModel({document,pageView});
+  const nativeCache = new Map();
   report({ stage: "prepare", message: "准备采集：" + source.title });
 
   const originalPath = location.pathname;
@@ -329,7 +354,7 @@ export async function capturePage({ stepRatio = 0.6, dwellMs, maxSteps = 400, on
       block.html = serialize(fragment);
     }
 
-    // 普通图片复制已加载位图，图形由本页原生渲染器输出；不自行请求原件。
+    // 普通图片优先读取本页高清资源；失败时使用已加载位图。
     async function captureImage(id) {
       if (blocks.get(id)?.type === 'diagram') {
         try {
@@ -361,7 +386,7 @@ export async function capturePage({ stepRatio = 0.6, dwellMs, maxSteps = 400, on
       try {
         const index = images.findIndex(image => image.blockId === id);
         const saved = index < 0 ? undefined : {image:images[index],state:imageStates.get(id)};
-        const {image,state} = await captureLoadedImage(id,{wait,checkStop,saved});
+        const {image,state} = await captureLoadedImage(id,{wait,checkStop,saved,pageView,cache:nativeCache});
         if (index < 0) images.push(image); else images[index]=image;
         imageStates.set(id,state); observedImages.set(id,state); imageErrors.delete(id);
         return true;
@@ -376,13 +401,18 @@ export async function capturePage({ stepRatio = 0.6, dwellMs, maxSteps = 400, on
     const positions = new Map();
     const codeBlocks = new Map();
     const images = [];
+    const attachments = new Map(), pendingFiles = new Set();
+    let attachmentBytes = 0;
+    const attemptedFiles = new Set();
     const failedImages = new Set();
     const whiteboardErrors = new Map();
     const diagramErrors = new Map();
     const imageStates = new Map(), observedImages = new Map(), pendingImages = new Set(), imageErrors = new Map();
     function sampleBlock(el) {
       const id = el.getAttribute('data-block-id');
+      if (!/^[\w-]{1,160}$/u.test(id || '')) return null;
       const type = el.getAttribute('data-block-type') || '';
+      if (type === 'file' && !attemptedFiles.has(id)) pendingFiles.add(id);
       if (type === 'image') {
         const state = readImageState(el);
         if (!observedImages.has(id) || !sameImageState(observedImages.get(id),state)) pendingImages.add(id);
@@ -395,7 +425,7 @@ export async function capturePage({ stepRatio = 0.6, dwellMs, maxSteps = 400, on
       const score = scoreOf(el);
       const semantic = !CONTAINER_TYPES.has(type) ? semanticContent(html) : null;
       const parent = el.parentElement?.closest('[data-block-id]');
-      const block = {id,type,parentId:parent && parent !== el ? parent.getAttribute('data-block-id') : '',html,observedHtml:html,score,semantic};
+      const block = {id,type,recordId:el.getAttribute('data-record-id') || '',parentId:parent && parent !== el ? parent.getAttribute('data-block-id') : '',html,observedHtml:html,score,semantic};
       if (!stored) return {fresh:true,block};
       const previous = stored.semantic;
       const equalContentSize = semantic && previous && semantic.text.trim() && previous.text.trim()
@@ -412,6 +442,16 @@ export async function capturePage({ stepRatio = 0.6, dwellMs, maxSteps = 400, on
       for (const block of snap.improved) Object.assign(blocks.get(block.id),block);
     }
     async function collectImages(snap) {
+      for (const id of [...pendingFiles]) {
+        pendingFiles.delete(id); attemptedFiles.add(id);
+        if (attachmentBytes >= 48*1024*1024 || attachments.size >= 128) continue;
+        try {
+          const attachment = await readNativeAttachment(id,{document,pageView,checkStop,cache:nativeCache});
+          if (attachment && attachmentBytes + attachment.bytes.length <= 48*1024*1024) {
+            attachments.set(id,attachment); attachmentBytes += attachment.bytes.length;
+          }
+        } catch (error) { if (error.name === 'AbortError') throw error; }
+      }
       for (const block of snap.fresh) {
         if (block.type === 'whiteboard' && !images.some(image => image.blockId === block.id)) {
           if (!await captureImage(block.id)) failedImages.add(block.id);
@@ -504,10 +544,21 @@ export async function capturePage({ stepRatio = 0.6, dwellMs, maxSteps = 400, on
     const pageId = pageBlock ? pageBlock.id : "1";
     const roots = [...blocks.values()].filter((block) => block.parentId === pageId);
     if (!roots.length) throw new Error("没有采集到文档内容，请刷新页面后重试");
+    let semantic = null, semanticById = new Map(), modelStructureReady = false;
+    const sourceFallbackIds = new Set();
+    function modelOrder(children,parentId) {
+      if (!modelStructureReady) return false;
+      const expected = parentId === pageId ? semantic?.roots : semanticById.get(parentId)?.children;
+      if (!expected) return false;
+      const order = new Map(expected.map((id,index) => [id,index]));
+      if (!children.every(block => order.has(block.id))) return false;
+      children.sort((a,b) => order.get(a.id)-order.get(b.id));
+      return true;
+    }
     function refreshRoots() {
       roots.length = 0;
       for (const block of blocks.values()) if (block.parentId === pageId) roots.push(block);
-      if (roots.every(hasNumericId)) roots.sort((a,b) => Number(a.id)-Number(b.id));
+      if (!modelOrder(roots,pageId) && roots.every(hasNumericId)) roots.sort((a,b) => Number(a.id)-Number(b.id));
     }
 
     // 定位辅助：以相对位置定位，失败后从估计位置向两侧快速扩散扫描。
@@ -598,6 +649,36 @@ export async function capturePage({ stepRatio = 0.6, dwellMs, maxSteps = 400, on
     for (const id of failedImages) {
       if (blocks.get(id)?.type !== 'diagram') continue;
       if (await revealBlock(id,positions.get(id)) && await captureImage(id)) failedImages.delete(id);
+    }
+    // Discover missing regions before reference/table/code final review so newly
+    // mounted blocks receive exactly the same completeness checks as the first pass.
+    const modelForRecheck = readBoundModel();
+    if (modelForRecheck) {
+      let rechecks = 0;
+      const expected = new Map(modelForRecheck.blocks.map(block => [block.id,block]));
+      const anchors = new Map(), visitedParents = new Set();
+      for (const block of modelForRecheck.blocks) {
+        if (blocks.has(block.id) || rechecks >= 12) continue;
+        const siblings = block.parentId === pageId ? modelForRecheck.roots : expected.get(block.parentId)?.children || [];
+        if (!visitedParents.has(block.parentId)) {
+          visitedParents.add(block.parentId);
+          let previous = block.parentId;
+          for (const id of siblings) {
+            if (positions.has(id)) previous = id;
+            anchors.set(id,previous);
+          }
+          let next = null;
+          for (let index=siblings.length-1;index>=0;index--) {
+            const id=siblings[index];
+            if (positions.has(id)) next=id;
+            if (next) anchors.set(id,next);
+          }
+        }
+        const anchor = anchors.get(block.id);
+        if (!positions.has(anchor)) continue;
+        rechecks++;
+        if (await tryAt(anchor,positions.get(anchor)*scroller.scrollHeight-scroller.clientHeight/2)) await collectAtCurrentPosition();
+      }
     }
     function insideReference(block,id) {
       if (block.id === id) return false;
@@ -884,6 +965,65 @@ export async function capturePage({ stepRatio = 0.6, dwellMs, maxSteps = 400, on
       if (refreshed) Object.assign(blocks.get(block.id),refreshed.block);
     }
 
+    // The model is optional and page-bound. Its explicit child arrays establish
+    // order; source text only compensates supported blocks that DOM never mounted.
+    function readBoundModel() {
+      const snapshot = readPageModel({document,pageView});
+      if (!snapshot || snapshot.rootId !== pageId || snapshot.recordId !== source.docToken) return null;
+      for (const block of snapshot.blocks) {
+        const saved = blocks.get(block.id);
+        if (saved && (saved.type !== block.type || saved.recordId !== block.recordId)) return null;
+      }
+      return snapshot;
+    }
+    semantic = readBoundModel();
+    const boundInitial = initialModel?.rootId === pageId && initialModel.recordId === source.docToken ? initialModel : null;
+    if (boundInitial && (!semantic || boundInitial.recordId !== semantic.recordId || boundInitial.rootId !== semantic.rootId)) {
+      contentChanged(pageId,'正文结构');
+    }
+    if (semantic) {
+      semanticById = new Map(semantic.blocks.map(block => [block.id,block]));
+      modelStructureReady = !semantic.warnings.some(warning => warning.code === 'missing_block');
+      const before = new Map((boundInitial?.blocks || []).map(block => [block.id,block]));
+      for (const block of semantic.blocks) {
+        const previous = before.get(block.id);
+        if (previous?.ready && block.ready && JSON.stringify(previous) !== JSON.stringify(block)) contentChanged(block.id,'正文源块');
+      }
+      if (boundInitial && JSON.stringify(boundInitial.roots) !== JSON.stringify(semantic.roots)) contentChanged(pageId,'正文结构');
+      const sourceTypes = new Set(['text','heading1','heading2','heading3','heading4','heading5','heading6','bullet','ordered','todo','code','divider','isv']);
+      const slots = {bullet:'list-children',ordered:'list-children',callout:'callout-block-children',grid:'grid-block',grid_column:'grid-column-block'};
+      const validSlots = new Map();
+      const missing = [];
+      for (const block of semantic.blocks) {
+        if (blocks.has(block.id)) continue;
+        const parent = blocks.get(block.parentId);
+        if (parent && slots[parent.type] && !validSlots.has(parent.id)) {
+          const region = findChildRegion(parseFragment(parent.html),parent.id,slots[parent.type]);
+          validSlots.set(parent.id,Boolean(region && !hasOwnLine(region,parent.id)));
+        }
+        const canPlace = block.parentId === pageId || validSlots.get(parent?.id) === true;
+        const hasSource = block.type === 'divider' || typeof block.text === 'string' || block.ops?.length || block.source || block.timeline;
+        if (!modelStructureReady || !block.ready || !sourceTypes.has(block.type) || !canPlace || !hasSource) {
+          missing.push(block.id); continue;
+        }
+        const slot = slots[block.type];
+        const html = '<div data-block-id="'+block.id+'" data-block-type="'+block.type+'" data-export-semantic-only="1">'+
+          (slot ? '<div class="'+slot+'"></div>' : '')+'</div>';
+        blocks.set(block.id,{id:block.id,type:block.type,parentId:block.parentId,recordId:block.recordId,html,semanticOnly:true});
+        sourceFallbackIds.add(block.id);
+      }
+      if (missing.length) warnings.push({code:'missing_block',label:'正文模型中 '+missing.length+' 个块未能完整采集：'+missing.slice(0,20).join('、')+(missing.length>20?'…':'')});
+      refreshRoots();
+    }
+    // Retry a file only once at its known position. Conversion supplies an exact
+    // missing_attachment warning if native download remains unavailable.
+    for (const block of blocks.values()) {
+      if (block.type !== 'file' || attachments.has(block.id)) continue;
+      if (!document.querySelector('[data-block-id="'+block.id+'"]') && !await tryAt(block.id,(positions.get(block.id)||0)*scroller.scrollHeight-scroller.clientHeight/2)) continue;
+      pendingFiles.add(block.id);
+    }
+    await collectImages({fresh:[]});
+
     const childrenByParent = new Map();
     for (const block of blocks.values()) {
       if (!childrenByParent.has(block.parentId)) childrenByParent.set(block.parentId, []);
@@ -905,35 +1045,20 @@ export async function capturePage({ stepRatio = 0.6, dwellMs, maxSteps = 400, on
       for (const child of children) rebuildChildren(child,visiting);
       visiting.delete(block.id);
       const fragment = parseFragment(block.html);
-      function findChildren(node) {
-        const attrs = node.attrs || [];
-        const id = attrs.find(attr => attr.name === 'data-block-id')?.value;
-        if (id && id !== block.id) return null;
-        const classes = attrs.find(attr => attr.name === 'class')?.value.split(/\s+/u) || [];
-        if (classes.includes(slotClass)) return node;
-        for (const child of node.childNodes || []) {
-          const found = findChildren(child);
-          if (found) return found;
-        }
-        return null;
-      }
+      const findChildren = node => findChildRegion(node,block.id,slotClass);
       const slot = findChildren(fragment);
       if (!slot) {
         warnings.push({code:'missing_block',label:childLabel(block) + block.id + ' 未找到嵌套内容容器，未能确认子项位置。'});
         return;
       }
-      function hasOwnLine(node) {
-        const attrs = node.attrs || [];
-        if (attrs.some(attr => attr.name === 'data-block-id' && attr.value !== block.id)) return false;
-        if (attrs.some(attr => attr.name === 'class' && attr.value.split(/\s+/u).includes('ace-line'))) return true;
-        return (node.childNodes || []).some(hasOwnLine);
-      }
-      if (hasOwnLine(slot)) {
+      if (hasOwnLine(slot,block.id)) {
         warnings.push({code:'missing_block',label:childLabel(block) + block.id + ' 的自身文字与子项容器混合，未能确认子项位置。'});
         return;
       }
       let ordered = [...children];
-      if (block.type === 'grid') {
+      if (modelOrder(ordered,block.id)) {
+        // Exact model child order is preferred over viewport positions or IDs.
+      } else if (block.type === 'grid') {
         // Column IDs and vertical positions cannot establish left-to-right order.
         const byId = new Map(children.map(child => [child.id,child]));
         function columnOrder(markup) {
@@ -987,7 +1112,7 @@ export async function capturePage({ stepRatio = 0.6, dwellMs, maxSteps = 400, on
         warnings.push({ code: "missing_block", label: "内嵌页面 " + page.id + " 未找到正文容器，未能合并已采集的内容。" });
         continue;
       }
-      if (children.every(hasNumericId)) children.sort((a, b) => Number(a.id) - Number(b.id));
+      if (!modelOrder(children,page.id) && children.every(hasNumericId)) children.sort((a, b) => Number(a.id) - Number(b.id));
       const rebuilt = parseFragment(children.map(child => child.html).join(""));
       body.childNodes = rebuilt.childNodes;
       for (const child of body.childNodes) child.parentNode = body;
@@ -1041,8 +1166,24 @@ export async function capturePage({ stepRatio = 0.6, dwellMs, maxSteps = 400, on
       }
     }
 
+    if (sourceFallbackIds.size) {
+      const placed = new Set();
+      for (const root of roots) {
+        const pending = [...parseFragment(root.html).childNodes];
+        while (pending.length) {
+          const node = pending.pop();
+          const id = node.attrs?.find(attr => attr.name === 'data-block-id')?.value;
+          if (sourceFallbackIds.has(id)) placed.add(id);
+          for (const child of node.childNodes || []) pending.push(child);
+        }
+      }
+      if (placed.size) warnings.push({code:'source_fallback',label:'已从本页源结构补全 '+placed.size+' 个未挂载正文块，请核对外观。'});
+      const unplaced = [...sourceFallbackIds].filter(id => !placed.has(id));
+      if (unplaced.length) warnings.push({code:'missing_block',label:'源结构补偿的 '+unplaced.length+' 个块未能写入导出正文：'+unplaced.slice(0,20).join('、')+(unplaced.length>20?'…':'')});
+    }
+
     const knownRootTypes = new Set(["heading1", "heading2", "heading3", "heading4", "heading5", "heading6", "text",
-      "bullet", "ordered", "code", "table", "image", "whiteboard", "diagram", "quote", "quote_container", "synced_reference", "view", "callout", "divider", "todo", "grid", "grid_column", "file"]);
+      "bullet", "ordered", "code", "table", "image", "whiteboard", "diagram", "quote", "quote_container", "synced_reference", "view", "callout", "divider", "todo", "grid", "grid_column", "file", "isv"]);
     for (const type of new Set(roots.map((block) => block.type))) {
       if (!knownRootTypes.has(type)) warnings.push({ code: "unsupported_block", label: "未适配的块类型：" + type });
     }
@@ -1054,12 +1195,14 @@ export async function capturePage({ stepRatio = 0.6, dwellMs, maxSteps = 400, on
       generator: "feishu-local-exporter 油猴页面采集",
       source: { ...source, capturedAt: new Date().toISOString() },
       pageBlockId: pageId,
-      blocks: roots.map(({ id, type, html }) => ({ id, type, html })),
+      blocks: roots.map(({ id, type, html, semanticOnly }) => ({ id, type, html, ...(semanticOnly ? {semanticOnly:true} : {}) })),
       code: Object.fromEntries([...codeBlocks].map(([id, data]) => {
         const lines = [...data.lines].sort((a, b) => a[0] - b[0]).map(([num, text]) => ({ num, text }));
         return [id, data.confirmedEnd ? { lines, totalLines: data.confirmedEnd } : { lines }];
       })),
       images,
+      attachments:[...attachments.values()],
+      ...(semantic ? {semantic} : {}),
       warnings,
     };
   } finally {

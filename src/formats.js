@@ -1,16 +1,19 @@
 import { strToU8, zipSync } from 'fflate';
-import { visibleTags, webLink } from './importer.js';
+import { equationSource, visibleTags, webLink } from './importer.js';
 import { safeStem, warningLabel } from './shared.js';
 import { cellStyleText, columnGroupHtml, normalizeColor, normalizeColumnWidths } from './table-style.js';
+import {sanitizeSvg} from './svg.js';
 
 const zipOptions = { level: 1, mtime: new Date(2000, 0, 1) };
-const rasterTypes = new Set(['image/png', 'image/jpeg', 'image/gif', 'image/webp']);
+const imageTypes = new Set(['image/png', 'image/jpeg', 'image/gif', 'image/webp', 'image/svg+xml']);
 const maxOutputSize = 80 * 1024 * 1024;
 const maxMarkdownSize = 24 * 1024 * 1024;
 const htmlStyle = 'body{font:16px/1.65 system-ui,sans-serif;max-width:850px;margin:40px auto;padding:0 20px;color:#202020}' +
   'img{max-width:100%;height:auto}.table-scroll{max-width:100%;overflow-x:auto;margin:1em 0}' +
   'table{border-collapse:collapse}th,td{border:1px solid #999;padding:5px 10px;vertical-align:top}' +
   'pre{white-space:pre;overflow:auto;max-width:100%;tab-size:4;background:#f2f2f2;padding:12px}a{overflow-wrap:anywhere}figure{margin:1em 0}' +
+  '.export-equation{white-space:pre-wrap;font-family:ui-monospace,monospace;overflow-wrap:anywhere}' +
+  '.export-equation[data-export-display="block"]{display:block;margin:.8em 0}' +
   '.export-toc{margin:1em 0 1.5em;color:#4e5969}.export-toc summary{cursor:pointer;width:fit-content}' +
   '.export-toc ul{list-style:none;padding:0;margin:.6em 0}.export-toc li{margin:.3em 0}' +
   '.export-toc .toc-level-3{padding-left:1em}.export-toc .toc-level-4{padding-left:2em}' +
@@ -26,6 +29,17 @@ const markdownBlocksInCells = new Set(['blockquote', 'ul', 'ol', 'pre', 'hr', 'f
 
 function outputLimit() {
   return Object.assign(new Error('导出结果超过本机处理上限。'), { code: 'render_limit' });
+}
+
+function checkedSvgAssets(snapshot) {
+  const assets=snapshot.assets.map(asset=>{
+    if(asset.role!=='image' || asset.type!=='image/svg+xml' && !/\.svg$/iu.test(asset.path)) return asset;
+    let checked;
+    try {checked=sanitizeSvg(new TextDecoder('utf-8',{fatal:true}).decode(asset.bytes));} catch {}
+    if(!checked) throw Object.assign(new Error('SVG 素材未通过静态校验。'),{code:'invalid_svg'});
+    return {...asset,type:'image/svg+xml',bytes:new TextEncoder().encode(checked.source)};
+  });
+  return {...snapshot,assets};
 }
 
 function escapeHtml(text) {
@@ -81,10 +95,13 @@ function htmlNodes(nodes, lookup, embedded, account = (markup) => markup, presen
     if (typeof node === 'string') return account(escapeHtml(node));
     const { tag, children = [] } = node;
     if (!visibleTags.has(tag)) return htmlNodes(children, lookup, embedded, account, presentation, cellColor);
+    const equation = tag === 'span' ? equationSource(node.equation) : '';
+    if (equation) return account('<span class="export-equation" data-export-equation="' + escapeHtml(equation) +
+      '" data-export-display="' + (node.display === 'block' ? 'block' : 'inline') + '">' + escapeHtml(equation) + '</span>');
     const childCellColor = tag === 'td' || tag === 'th' ? normalizeColor(node.color) || cellColor : cellColor;
     const asset = lookup.get(node.path);
     if (tag === 'img') {
-      if (!rasterTypes.has(asset?.type) || asset.role !== 'image') return account('[缺少图片]');
+      if (!imageTypes.has(asset?.type) || asset.role !== 'image') return account('[缺少图片]');
       const src = embedded ? embedded(asset, true) : relativeUrl(asset.path);
       return account('<img src="' + escapeHtml(src) + '" alt="' + escapeHtml(node.alt ?? '') + '">');
     }
@@ -235,6 +252,14 @@ function longestBackticks(text) {
   return (text.match(/`+/gu) ?? []).reduce((longest, run) => Math.max(longest, run.length), 0);
 }
 
+function markdownEquation(node, lookup, block = false) {
+  const source = node.tag === 'span' ? equationSource(node.equation) : '';
+  if (!source) return '';
+  if (/[<$>`]/u.test(source) || /!\[|\]\(|&(?:#(?:x[\da-f]+|\d+)|[a-z][a-z\d]+);/iu.test(source) ||
+    !block && /[\r\n]/u.test(source)) return markdownHtml([node], lookup);
+  return block ? '$$\n' + source + (source.endsWith('\n') ? '' : '\n') + '$$' : '$' + source + '$';
+}
+
 function markdownInline(nodes, lookup, table = false) {
   return joinMarkdown(nodes.map((node) => {
     if (typeof node === 'string') {
@@ -242,9 +267,12 @@ function markdownInline(nodes, lookup, table = false) {
       return table ? escaped.replaceAll('|', '\\|') : escaped;
     }
     const { tag, children = [] } = node;
+    if (tag === 'span' && equationSource(node.equation)) {
+      return table || node.display === 'block' ? markdownHtml([node], lookup) : markdownEquation(node, lookup);
+    }
     const asset = lookup.get(node.path);
     if (tag === 'img') {
-      if (!asset || asset.role !== 'image' || !rasterTypes.has(asset.type)) return '\\[缺少图片\\]';
+      if (!asset || asset.role !== 'image' || !imageTypes.has(asset.type)) return '\\[缺少图片\\]';
       const alt = escapeMarkdown(node.alt ?? '');
       return '![' + (table ? alt.replaceAll('|', '\\|') : alt) + '](' + relativeUrl(asset.path) + ')';
     }
@@ -277,7 +305,7 @@ function onlyElements(node) {
 
 function complexCell(node) {
   return (node.children ?? []).some((child) => typeof child === 'object' &&
-    (markdownBlocksInCells.has(child.tag) || complexCell(child)));
+    (markdownBlocksInCells.has(child.tag) || child.tag === 'span' && equationSource(child.equation) || complexCell(child)));
 }
 
 function markdownTable(table, lookup) {
@@ -373,7 +401,10 @@ function markdownFlow(nodes, lookup) {
     inline = [];
   }
   for (const node of nodes) {
-    if (typeof node === 'object' && blockTags.has(node.tag)) {
+    if (typeof node === 'object' && node.tag === 'span' && node.display === 'block' && equationSource(node.equation)) {
+      flush();
+      chunks.push(markdownEquation(node, lookup, true));
+    } else if (typeof node === 'object' && blockTags.has(node.tag)) {
       flush();
       chunks.push(markdownBlock(node, lookup));
     } else {
@@ -410,6 +441,7 @@ function attachmentManifest(snapshot) {
 export async function renderFile(kind, snapshot) {
   const file = safeStem(snapshot.title);
   if (kind === 'html') {
+    snapshot=checkedSvgAssets(snapshot);
     return {
       filename: file + '.html',
       blob: new Blob([standaloneHtml(snapshot, maxOutputSize)], { type: 'text/html;charset=utf-8' }),
@@ -421,6 +453,7 @@ export async function renderFile(kind, snapshot) {
 
 // 直接写最终归档；清单取自实际写入的字节。
 export function renderBundle(kinds, snapshot, extraFiles = []) {
+  snapshot=checkedSvgAssets(snapshot);
   const selected = new Set(kinds);
   if (!Array.isArray(extraFiles)) throw new Error('附加文件需要安全的根目录文件名和字节数据。');
   for (const extra of extraFiles) {

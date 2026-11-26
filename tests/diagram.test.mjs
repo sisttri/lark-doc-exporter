@@ -4,10 +4,14 @@ import {captureDiagram} from '../src/userscript/diagram.js';
 import {diagramFixture,diagramElement,htmlNamespace} from './helpers/diagram.mjs';
 import {pngDataUrl} from './helpers/whiteboard.mjs';
 
-test('流程图从原始矢量生成四倍高清 PNG，保留 HTML 标签与白色背景', async () => {
+test('流程图保留真正 SVG 主资产与四倍高清 PNG 回退，保留 HTML 标签与白色背景', async () => {
   const f=diagramFixture(),before=JSON.stringify(f.source);
   const image=await captureDiagram(f.document,'diagram',f.options);
-  assert.deepEqual(image,{blockId:'diagram',mime:'image/png',width:800,height:400,alt:'流程图',dataUrl:pngDataUrl});
+  assert.equal(image.mime,'image/svg+xml');assert.equal(image.width,200);assert.equal(image.height,100);
+  assert.equal(image.blockId,'diagram');assert.equal(image.alt,'流程图');
+  const primary=Buffer.from(image.dataUrl.split(',')[1],'base64').toString('utf8');
+  assert.match(primary,/<foreignObject/u);assert.match(primary,/示例标签/u);assert.match(primary,/第二行/u);
+  assert.deepEqual(image.rasterFallback,{mime:'image/png',width:800,height:400,dataUrl:pngDataUrl});
   assert.deepEqual(f.calls.slice(0,2),[1,4]);
   const svg=decodeURIComponent(f.sources[0].split(',')[1]);
   assert.match(svg,/<foreignObject/u);assert.match(svg,/<strong>示例标签<\/strong>/u);
@@ -27,7 +31,8 @@ test('流程图在请求原生渲染前限制边长和像素预算', async () =>
       return diagramElement('svg',{width:width*scale+'px',height:height*scale+'px',viewBox:'0 0 '+width*scale+' '+height*scale},f.source.childNodes);
     };
     const image=await captureDiagram(f.document,'diagram',f.options);
-    assert.ok(image);assert.ok(image.width<=8192 && image.height<=8192 && image.width*image.height<=16_000_000);
+    assert.ok(image);const output=image.rasterFallback;
+    assert.ok(output.width<=8192 && output.height<=8192 && output.width*output.height<=16_000_000);
     assert.ok(f.calls[1]>0 && f.calls[1]<=4);
   }
 });

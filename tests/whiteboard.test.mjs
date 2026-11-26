@@ -9,6 +9,29 @@ function clock(t, onWait) {
   return {wait:async ms => { now += ms; onWait?.(now); },checkStop() {}};
 }
 
+test('白板入口在主原生渲染失败后先尝试可信隔离场景，再考虑页面预览',async t=>{
+  const f=whiteboardFixture(),page=f.element('div','page',null,{'data-record-id':'page-record'});
+  f.block.setAttribute('data-record-id','board-record');f.block.parentElement=page;page.children.push(f.block);
+  const query=f.document.querySelector;
+  f.document.querySelector=selector=>selector==='[data-block-type="page"]'?page:query(selector);
+  const create=f.document.createElement,order=[];let released=0;
+  f.document.createElement=tag=>{const canvas=create(tag),context=canvas.getContext('2d');
+    context.putImageData=data=>{assert.equal(data.width,296);assert.equal(data.height,196);order.push('encode-isolated');};return canvas;};
+  const app={application:{nodeManager:{getNodesBounds:()=>({minX:0,maxX:100,minY:0,maxY:50})}},
+    renderManager:{getImageOffscreenCanvas(){order.push('primary');throw new Error('synthetic renderer unavailable');}}};
+  const proxy={getOriginImageDataByNodeId(padding,nodes,transparent,ratio){
+    order.push('isolated');assert.equal(padding,24);assert.deepEqual(nodes,['']);assert.equal(transparent,false);assert.equal(ratio,2);
+    return Promise.resolve({data:{width:296,height:196,data:new Uint8ClampedArray(296*196*4)},release(){released++;}});
+  }};
+  const model={id:'board',type:'whiteboard',record:{id:'board-record'},children:[],whiteboardBlock:{
+    abilityKit:{getRatioApp:()=>({app})},isolateEnv:{getRatioApp:()=>({app,ratioAppProxy:proxy})}}};
+  const pageView={PageMain:{blockManager:{rootBlockModel:{id:'page',record:{id:'page-record'},children:[model]}}}};
+  const image=await captureWhiteboardPreview('board',{document:f.document,pageView,...clock(t)});
+  assert.equal(image.source,'native-isolated');assert.equal(image.width,296);assert.equal(image.height,196);
+  assert.deepEqual(order,['primary','isolated','encode-isolated']);assert.equal(released,1);
+  assert.deepEqual(f.draws,[]);assert.deepEqual(f.styleWrites,[]);
+});
+
 test('白板仅复制明确内容层，白底填充在复制之前且返回PNG素材', async t => {
   const fixture = whiteboardFixture({decoys:true});
   assert.equal(findWhiteboardCanvas(fixture.block),fixture.content);

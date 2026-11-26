@@ -6,23 +6,29 @@ import {gzipSync} from 'node:zlib';
 import {readEmbeddedFont,encodeZ85,decodeZ85} from '../src/userscript/pdf-fonts.js';
 
 const engineSource = 'self.pdfMake = {};';
-const fontArchive = ['Regular', 'Bold'].map(name => ({name:name + '.woff2', compressed:'00000', compressedSize:1, size:1, hash:'a'.repeat(64)}));
+const fontArchive = ['Regular.woff2', 'Bold.woff2', 'Emoji.ttf', 'Symbols.ttf'].map(name => ({
+  name, compressed:'00000', compressedSize:1, size:1, hash:'a'.repeat(64),
+  ...(name === 'Emoji.ttf' ? {coverage:[[0x20,0x1fae8]]} : name === 'Symbols.ttf' ? {coverage:[[0x2610,0x2612]]} : {}),
+}));
 const resources = {pdfEngine:engineSource, pdfFonts:JSON.stringify(fontArchive)};
 const resourceHashes = Object.fromEntries(Object.entries(resources).map(([name, source]) => [name, createHash('sha256').update(source).digest('hex')]));
-const bundled = await build({
+async function renderer(hashes = resourceHashes) {
+  const bundled = await build({
   entryPoints:['src/userscript/pdf.js'], bundle:true, write:false, format:'esm',
   plugins:[{
     name:'test-pdf-worker',
     setup(builder) {
       builder.onResolve({filter:/^pdf-worker-assets$/}, () => ({path:'test',namespace:'pdf'}));
       builder.onLoad({filter:/.*/,namespace:'pdf'}, () => ({
-        contents:'export const workerSource="worker source"; export const resourceHashes=' + JSON.stringify(resourceHashes) + ';',
+        contents:'export const workerSource="worker source"; export const resourceHashes=' + JSON.stringify(hashes) + ';',
         loader:'js',
       }));
     },
   }],
-});
-const {renderPdf} = await import('data:text/javascript;base64,' + Buffer.from(bundled.outputFiles[0].text).toString('base64'));
+  });
+  return import('data:text/javascript;base64,' + Buffer.from(bundled.outputFiles[0].text).toString('base64'));
+}
+const {renderPdf} = await renderer();
 
 function environment(t) {
   const workers = [], revoked = [], urls = [], resourceCalls = [];
@@ -161,4 +167,17 @@ test('Z85 uses the standard vector and preserves padded byte tails', () => {
   for(const [encoded,size] of [['~~~~~',4],['#####',4],['Hello',5],['Hello',-1]]) {
     assert.throws(()=>decodeZ85(encoded,size),{code:'PDF_FONT_INVALID'});
   }
+});
+
+test('PDF cached fallback fonts reject missing or malformed coverage after resource hashes match',async t=>{
+  const scenarios=[undefined,[],[[2,1]],[[1,2],[2,3]],[[0,0x110000]],[[null,3]]];
+  for(const coverage of scenarios)await t.test(JSON.stringify(coverage) ?? 'missing',async t=>{
+    const invalidFonts=fontArchive.map(font=>font.name==='Emoji.ttf'?{...font,coverage}:font);
+    const cached={...resources,pdfFonts:JSON.stringify(invalidFonts)};
+    const hashes=Object.fromEntries(Object.entries(cached).map(([name,source])=>[name,createHash('sha256').update(source).digest('hex')]));
+    const compiled=await renderer(hashes),{workers,urls}=environment(t);
+    globalThis.GM_getResourceText=name=>cached[name];
+    await assert.rejects(compiled.renderPdf({}),{code:'PDF_RESOURCE_INVALID'});
+    assert.deepEqual(workers,[]);assert.deepEqual(urls,[]);
+  });
 });

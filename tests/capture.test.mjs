@@ -235,14 +235,15 @@ test('diagram 没有可用原生视图时明确提示缺图，不误报未知块
   assert.equal(session.scroller.scrollTop,session.originalTop);
 });
 
-test('diagram 从原生视图采集完整高清 PNG，转换后只输出一张图片', async t => {
+test('diagram 从原生视图采集矢量主图和高清回退，转换后只输出一张图片', async t => {
   const session = virtualDiagram(t,{native:true});
   const result = await capturePage({onProgress:session.onProgress});
   assert.equal(result.images.length,1);
   assert.equal(result.images[0].blockId,'diagram');
-  assert.equal(result.images[0].mime,'image/png');
-  assert.equal(result.images[0].dataUrl,pngDataUrl);
-  assert.ok(result.images[0].width > 200);
+  assert.equal(result.images[0].mime,'image/svg+xml');
+  assert.equal(result.images[0].rasterFallback.dataUrl,pngDataUrl);
+  assert.equal(result.images[0].width,200);
+  assert.ok(result.images[0].rasterFallback.width > 200);
   assert.deepEqual(result.warnings,[]);
   const converted = convertCapture(result);
   assert.equal((converted.html.match(/<img\b/gu) || []).length,1);
@@ -283,7 +284,7 @@ test('diagram 内容在采集后变化会更新已有素材，不重复加入图
     }
   }});
   assert.equal(result.images.length,1);
-  assert.equal(atob(result.images[0].dataUrl.split(',')[1]),'updated');
+  assert.equal(atob(result.images[0].rasterFallback.dataUrl.split(',')[1]),'updated');
   assert.deepEqual(result.warnings,[]);
 });
 
@@ -322,7 +323,7 @@ for (const type of ['table','synced_reference']) {
     assert.deepEqual(result.blocks.map(block => block.type),[type]);
     assert.deepEqual(result.warnings,[]);
     const converted = convertCapture(result);
-    assert.match(converted.html,/<img src="images\/diagram\.png"/u);
+    assert.match(converted.html,/<img src="images\/diagram\.svg"/u);
     assert.deepEqual(converted.warnings,[]);
     assert.equal(session.scroller.scrollTop,session.originalTop);
   });
@@ -1468,5 +1469,108 @@ for(const missingColumn of [false,true]) test(missingColumn?'分栏缺少完整�
     assert.ok(html.indexOf('右栏正文')<html.indexOf('先屏正文'));
     assert.deepEqual(result.warnings,[]);
   }
+  assert.equal(session.scroller.scrollTop,session.originalTop);
+});
+
+function semanticModel(t, session, children) {
+  const doc=globalThis.document, page=doc.querySelector('.page-block');
+  const all=doc.querySelectorAll('[data-block-id]');
+  for (const el of all) {
+    const old=el.getAttribute;
+    el.getAttribute=name => name==='data-record-id' ? (el===page?'testDocument':'record-'+old('data-block-id')) : old(name);
+  }
+  const root={id:'1',type:'page',record:{id:'testDocument'},children};
+  const previous=Object.getOwnPropertyDescriptor(globalThis,'unsafeWindow');
+  globalThis.unsafeWindow={PageMain:{blockManager:{rootBlockModel:root}}};
+  t.after(()=>{if(previous)Object.defineProperty(globalThis,'unsafeWindow',previous);else delete globalThis.unsafeWindow;});
+  return root;
+}
+const textModel=(id,text)=>({id,type:'text',record:{id:'record-'+id},snapshot:{},zoneState:{allText:text,content:{ops:[{insert:text}]}}});
+
+test('正文模型按真实块树排序，缺少DOM的就绪正文以源码补全并如实提示',async t=>{
+  const session=virtualDocument(t,{textIds:['3','7'],totalHeight:300});
+  semanticModel(t,session,[textModel('7','前文'),textModel('5','缺失正文'),textModel('3','后文')]);
+  const result=await capturePage({onProgress:session.onProgress});
+  assert.deepEqual(result.blocks.map(b=>b.id),['7','5','3']);
+  assert.equal(result.blocks[1].semanticOnly,true);
+  assert.ok(result.warnings.some(w=>w.code==='source_fallback'));
+  const converted=convertCapture(result);
+  assert.match(converted.html,/缺失正文/u);
+});
+
+test('正文模型中缺少图片DOM不能伪造完整素材，准确提示缺块',async t=>{
+  const session=virtualDocument(t,{textIds:['2'],totalHeight:300});
+  const image={id:'8',type:'image',record:{id:'image-record'},snapshot:{image:{token:'not-fetched'}}};
+  semanticModel(t,session,[textModel('2','正文'),image]);
+  const result=await capturePage({onProgress:session.onProgress});
+  assert.deepEqual(result.images,[]);
+  assert.ok(result.warnings.some(w=>w.code==='missing_block'&&/8/u.test(w.label)));
+});
+
+test('采集期间正文模型的就绪源码改变会保留变化提示',async t=>{
+  const session=virtualDocument(t,{textIds:['2'],totalHeight:300});
+  const model=textModel('2','原文'); semanticModel(t,session,[model]);
+  const result=await capturePage({onProgress:p=>{session.onProgress(p);if(p.stage==='audit')model.zoneState={allText:'改文',content:{ops:[{insert:'改文'}]}};}});
+  assert.ok(result.warnings.some(w=>w.code==='capture_content_changed'));
+});
+
+function modelCallout(t,{missingSlot=false,detached=false}={}) {
+  const session=virtualDocument(t,{textIds:[],totalHeight:400});
+  const doc=globalThis.document,page=doc.querySelector('.page-block'),all=doc.querySelectorAll,one=doc.querySelector;
+  const parentId=detached?'3':'2';let reference;
+  const parent={getAttribute:name=>({'data-block-id':parentId,'data-block-type':'callout'})[name]??null,
+    parentElement:{closest:()=>detached?reference:page},textContent:'提示本行',
+    outerHTML:'<div data-block-id="'+parentId+'" data-block-type="callout"><div class="ace-line">提示本行</div>'+
+      (missingSlot?'':'<div class="callout-block-children"></div>')+'</div>',
+    querySelectorAll:()=>[],querySelector:()=>null,getBoundingClientRect:()=>({top:100-session.scroller.scrollTop,bottom:160-session.scroller.scrollTop,height:60}),scrollIntoView(){}};
+  reference={...parent,getAttribute:name=>({'data-block-id':'2','data-block-type':'quote_container'})[name]??null,
+    parentElement:{closest:()=>page},outerHTML:'<div data-block-id="2" data-block-type="quote_container"><div class="ace-line">引用本行</div></div>'};
+  const nodes=[page,...(detached?[reference]:[]),parent];
+  doc.querySelectorAll=selector=>selector==='[data-block-id]'?nodes:all(selector);
+  doc.querySelector=selector=>nodes.find(node=>selector==='[data-block-id="'+node.getAttribute('data-block-id')+'"]')||one(selector);
+  const model={id:parentId,type:'callout',record:{id:'record-'+parentId},children:[textModel('8','补偿正文')]};
+  semanticModel(t,session,detached?[{id:'2',type:'quote_container',record:{id:'record-2'},children:[model]}]:[model]);
+  return session;
+}
+
+test('模型补偿找不到父块真实子槽时不报告已补全，保留原文和准确缺块提示',async t=>{
+  const session=modelCallout(t,{missingSlot:true});
+  const result=await capturePage({onProgress:session.onProgress});
+  assert.ok(convertCapture(result).html.includes('提示本行'));
+  assert.ok(result.warnings.some(w=>w.code==='missing_block'&&w.label.includes('8')));
+  assert.ok(!result.warnings.some(w=>w.code==='source_fallback'));
+});
+
+test('模型补偿只有实际进入最终根快照才计为成功，失去祖先位置时不虚报',async t=>{
+  const session=modelCallout(t,{detached:true});
+  const result=await capturePage({onProgress:session.onProgress});
+  assert.ok(!convertCapture(result).html.includes('补偿正文'));
+  assert.ok(result.warnings.some(w=>w.code==='missing_block'));
+  assert.ok(!result.warnings.some(w=>w.code==='source_fallback'));
+});
+
+test('模型定点补采才挂载的长代码块仍经过缺行和块尾复核',async t=>{
+  const session=virtualDocument(t,{textIds:['3'],totalHeight:1400,delayedLines:[]});
+  const doc=globalThis.document,all=doc.querySelectorAll,one=doc.querySelector;
+  const code=one('[data-block-id="2"]'),anchor=all('[data-block-id]').find(node=>node.getAttribute('data-block-id')==='3');
+  let mounted=false;
+  const rows=Array.from({length:30},(_,index)=>({textContent:'late line '+(index+1),getAttribute:()=>String(index+1),
+    getBoundingClientRect:()=>({top:700+index*20-session.scroller.scrollTop,bottom:720+index*20-session.scroller.scrollTop,height:20})}));
+  const visible=()=>rows.filter(row=>{const box=row.getBoundingClientRect();return box.bottom>0&&box.top<session.scroller.clientHeight;});
+  const zone={getBoundingClientRect:()=>({top:700-session.scroller.scrollTop,bottom:1300-session.scroller.scrollTop,height:600}),
+    lastElementChild:{contains:row=>row===rows.at(-1)&&visible().includes(row)}};
+  const get=code.getAttribute;
+  code.getAttribute=name=>name==='data-record-id'?'record-2':get(name);
+  code.querySelectorAll=selector=>selector===ROW?visible():[];
+  code.querySelector=selector=>selector===ROW?visible()[0]??null:['.code-block-content','.code-block-zone-container'].includes(selector)?zone:null;
+  anchor.scrollIntoView=()=>{mounted=true;session.scroller.scrollTop=700;};
+  doc.querySelectorAll=selector=>selector==='[data-block-id]'?[...all(selector),...(mounted?[code]:[])]:
+    selector==='.docx-code-block[data-block-id]'?(mounted?[code]:[]):all(selector);
+  doc.querySelector=selector=>selector==='[data-block-id="2"]'?(mounted?code:null):selector==='[data-block-id="3"]'?anchor:one(selector);
+  semanticModel(t,session,[textModel('3','锚点'),{id:'2',type:'code',record:{id:'record-2'},snapshot:{},zoneState:{allText:rows.map(row=>row.textContent).join('\n')}}]);
+  const result=await capturePage({onProgress:session.onProgress});
+  assert.equal(result.code['2'].lines.length,30);
+  assert.equal(result.code['2'].totalLines,30);
+  assert.ok(!result.warnings.some(w=>['code_tail_unconfirmed','code_lines_missing'].includes(w.code)));
   assert.equal(session.scroller.scrollTop,session.originalTop);
 });

@@ -1,3 +1,5 @@
+import {readNativeImage} from './native-media.js';
+
 function visibleImage(node, block) {
   if (node.isConnected === false || node.closest('[data-block-id]') !== block) return false;
   const box = node.getBoundingClientRect();
@@ -30,11 +32,16 @@ function checkDimensions(width, height) {
     || width > 8192 || height > 8192 || width*height > 16_000_000) throw new Error('图片位图尺寸超过限制或无效');
 }
 
-// Read only the image already loaded by the page; do not fetch or rewrite its URL.
-export async function captureLoadedImage(id, {document = globalThis.document, wait, checkStop, saved} = {}) {
+export async function captureLoadedImage(id, {document = globalThis.document, wait, checkStop=()=>{}, saved,
+  pageView,cache,fetch,timeoutMs} = {}) {
+  const current = () => readImageState(document.querySelector('[data-block-id="' + id + '"]'));
+  try {
+    const image=await readNativeImage(id,{document,pageView,checkStop,cache,fetch,timeoutMs});
+    if(image)return {image,state:current()};
+  } catch(error) {if(error.name==='AbortError')throw error;}
+  checkStop();
   const started = Date.now();
   let previous = null, stableSince = started;
-  const current = () => readImageState(document.querySelector('[data-block-id="' + id + '"]'));
   while (Date.now()-started <= 2500) {
     checkStop();
     const state = current();
@@ -61,7 +68,7 @@ export async function captureLoadedImage(id, {document = globalThis.document, wa
         const dataUrl = canvas.toDataURL('image/png');
         if (!/^data:image\/png;base64,[A-Za-z0-9+/]+={0,2}$/u.test(dataUrl)) throw new Error('图片未生成有效PNG');
         if (!sameImageState(state,current())) continue;
-        return {state,image:{blockId:id,alt:state.node.getAttribute('alt') || '',mime:'image/png',width,height,dataUrl}};
+        return {state,image:{blockId:id,alt:state.node.getAttribute('alt') || '',mime:'image/png',width,height,dataUrl,source:'loaded-bitmap'}};
       } finally {bitmap?.close();}
     }
     await wait(60);

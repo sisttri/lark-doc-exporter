@@ -5,7 +5,7 @@
     "sha256": "34561e07851000e186ab22e1cb8e38b84e54f2de618946de4053f692c8d2003b"
   },
   "fonts": {
-    "url": "https://raw.githubusercontent.com/sisttri/lark-doc-exporter/26c22708c7b5a952611c185fa2c151d60bde83ce/release-assets/pdf-fonts-v1.json",
-    "sha256": "76df3504ffe8e93e530e75807ef7cc48ecf844c584e3d7224f19b6c2e35d1a3c"
+    "url": "https://raw.githubusercontent.com/sisttri/lark-doc-exporter/f7efc9fc376629070277b21d2ac391c6d02e3b82/release-assets/pdf-fonts-v1.json",
+    "sha256": "7304c9cd921c4c749670ff8e98a849650257175d25349c3d1d3132e32e241461"
   }
 }

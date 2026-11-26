@@ -1,6 +1,7 @@
 // This module only consumes the neutral document tree. Nothing here reads a page.
 import {warningLabel} from './shared.js';
 import {normalizeCellStyle, normalizeColumnWidths} from './table-style.js';
+import {missingEmojiGlyphs, splitEmojiRuns} from './pdf-emoji.js';
 const INLINE = new Set(['a', 'span', 'strong', 'b', 'em', 'i', 's', 'del', 'strike', 'small', 'u', 'code', 'mark', 'sub', 'sup', 'br']);
 const SECTIONS = new Set(['thead', 'tbody', 'tfoot']);
 const MiB = 1024 * 1024;
@@ -59,11 +60,15 @@ export async function prepareImages(snapshot) {
   let pixels = 0, bytes = 0, renderedBytes = 0, skipped = 0, staticImages = 0;
   for (const asset of snapshot.assets) {
     if (asset.role !== 'image' || !referenced.has(asset.path)) continue;
-    bytes += asset.bytes.length;
+    const raster = asset.type === 'image/svg+xml' ? asset.rasterFallback : asset;
+    bytes += asset.bytes.length + (asset.type === 'image/svg+xml' ? raster?.bytes.length || 0 : 0);
     if (bytes > 24 * MiB || referenced.size > 110) limit();
+    // foreignObject contains diagram labels; SVG-to-PDF does not render it.
+    // Only a separately validated PNG is passed to the raster decoder.
+    if (!raster || asset.type === 'image/svg+xml' && raster.type !== 'image/png') {skipped++;continue;}
     let bitmap;
     try {
-      bitmap = await createImageBitmap(new Blob([asset.bytes], {type:asset.type}));
+      bitmap = await createImageBitmap(new Blob([raster.bytes], {type:raster.type}));
       pixels += bitmap.width * bitmap.height;
       if (pixels > 28e6) limit();
       const {width,height} = bitmap;
@@ -74,9 +79,9 @@ export async function prepareImages(snapshot) {
       for (let top = 0; top < height; top += sliceHeight) {
         const partHeight = Math.min(sliceHeight,height-top);
         let preparedBytes, type = 'image/png';
-        if (height <= sliceHeight && (asset.type === 'image/jpeg' || asset.type === 'image/png' && staticPng(asset.bytes))) {
-          preparedBytes = asset.bytes;
-          type = asset.type;
+        if (height <= sliceHeight && (raster.type === 'image/jpeg' || raster.type === 'image/png' && staticPng(raster.bytes))) {
+          preparedBytes = raster.bytes;
+          type = raster.type;
         } else {
           const canvas = new OffscreenCanvas(width, partHeight);
           try {
@@ -97,7 +102,7 @@ export async function prepareImages(snapshot) {
       names.set(asset.path, parts[0].id);
       dimensions.set(asset.path, {width, height});
       if (parts.length > 1) slices.set(asset.path,parts);
-      if (asset.type === 'image/gif' || asset.type === 'image/webp') staticImages++;
+      if (raster.type === 'image/gif' || raster.type === 'image/webp') staticImages++;
     } catch (error) {
       if (error.code === 'PDF_LIMIT') throw error;
       skipped++;
@@ -175,14 +180,37 @@ function columnWidths(grid, count, availableWidth, hints) {
 }
 export function pdfDefinition(snapshot, prepared = {images:{}, names:new Map()}) {
   checkedSize(snapshot);
-  let denseTables = 0;
-  const textLine = (str, add = {}) => ({text:boundLongTokens(str), ...add});
+  let denseTables = 0, equations = 0;
+  const missingGlyphs = new Set();
+  function auditGlyphs(text) {
+    if (prepared.fontCoverage) {
+      for (const glyph of missingEmojiGlyphs(text,prepared.fontCoverage)) { missingGlyphs.add(glyph); }
+    }
+  }
+  function textLine(str, add = {}) {
+    auditGlyphs(str);
+    const runs = splitEmojiRuns(str);
+    if (!runs.some(run => run.font)) return {text:boundLongTokens(str), ...add};
+    return {text:runs.map(run => run.font ? run : {text:boundLongTokens(run.text)}), ...add};
+  }
+  function codeLine(source, add = {}) {
+    const runs = source.match(/[\x00-\x7f]+|[^\x00-\x7f]+/gu) || [];
+    return {text:runs.map(text => textLine(text,{font:/^[\x00-\x7f]+$/u.test(text) ? 'Courier' : 'Noto'})),
+      preserveLeadingSpaces:true, ...add};
+  }
   function sequence(nodes, availableWidth, fontSize, cellColor) {
     const out = [], buffer = [];
     function flush() { if (buffer.length) out.push({text:buffer.splice(0)}); }
     function walk(node, style) {
       if (typeof node === 'string') { if (node) buffer.push(textLine(node, style)); return; }
       const tag = node.tag;
+      if (typeof node.equation === 'string') {
+        equations++;
+        const source = codeLine(node.equation,style);
+        if (node.display === 'block') { flush(); out.push({...source,margin:[0,4,0,5]}); }
+        else buffer.push(source);
+        return;
+      }
       if (tag === 'br') { buffer.push(textLine('\n', style)); return; }
       if (tag === 'img') {
         flush();
@@ -302,9 +330,7 @@ export function pdfDefinition(snapshot, prepared = {images:{}, names:new Map()})
     }
     if (tag === 'hr') return {canvas:[{type:'line', x1:0, y1:0, x2:Math.min(200,availableWidth), y2:0, lineWidth:.5, lineColor:'#9bafa4'}],margin:[0,6,0,6]};
     if (tag === 'pre') {
-      const runs = plain(node).match(/[\x00-\x7f]+|[^\x00-\x7f]+/gu) || [];
-      return {text:runs.map(text => textLine(text, {font:/^[\x00-\x7f]+$/u.test(text) ? 'Courier' : 'Noto'})),
-        preserveLeadingSpaces:true, fontSize:9, margin:[Math.min(6,availableWidth-MIN_COLUMN_WIDTH),4,0,5], color:cellColor ?? '#314d40'};
+      return codeLine(plain(node),{fontSize:9,margin:[Math.min(6,availableWidth-MIN_COLUMN_WIDTH),4,0,5],color:cellColor ?? '#314d40'});
     }
     if (tag === 'blockquote') {
       const indent = Math.min(14,availableWidth-MIN_COLUMN_WIDTH);
@@ -319,12 +345,19 @@ export function pdfDefinition(snapshot, prepared = {images:{}, names:new Map()})
   }
   const hasTitle = snapshot.blocks.some(matchesTitle);
   if (!hasTitle) content.unshift(textLine(snapshot.title,{bold:true,fontSize:22,margin:[0,0,0,9]}));
+  const notices = new Map((snapshot.warnings || []).map(({code,label}) => [label || warningLabel(code),
+    warningLabel(code) + (label ? ' · ' + label : '')]));
+  for (const notice of notices.values()) auditGlyphs(notice);
   const notes = [];
   if (prepared.skipped) notes.push(prepared.skipped + ' 幅图片已用文字说明');
   if (prepared.staticImages) notes.push(prepared.staticImages + ' 幅图片以静态画面排版');
   if (denseTables) notes.push(denseTables + ' 个宽表已按行展开');
-  const notices = new Map((snapshot.warnings || []).map(({code,label}) => [label || warningLabel(code),
-    warningLabel(code) + (label ? ' · ' + label : '')]));
+  if (equations) notes.push(equations + ' 处公式已保留为 LaTeX 源码，未进行数学排版');
+  if (missingGlyphs.size) {
+    const codepoints = [...missingGlyphs].map(glyph => [...glyph].map(character =>
+      'U+' + character.codePointAt(0).toString(16).toUpperCase().padStart(4,'0')).join(' '));
+    notes.push('PDF 字体未覆盖的表情或符号：' + codepoints.join('；') + '。原字符已保留，可能显示为空框。');
+  }
   for (const note of notes) if (!notices.has(note)) notices.set(note,note);
   if (prepared.slices?.size) {
     const note = prepared.slices.size + ' 幅长图已按原分辨率连续分段排版';
@@ -332,7 +365,7 @@ export function pdfDefinition(snapshot, prepared = {images:{}, names:new Map()})
   }
   if (notices.size) {
     content.push({text:'保存提示',bold:true,fontSize:12,margin:[0,10,0,5]},
-      {ul:[...notices.values()],fontSize:9,color:'#715522'});
+      {ul:[...notices.values()].map(notice => textLine(notice)),fontSize:9,color:'#715522'});
   }
   return {denseTables, notes, doc:{info:{title:snapshot.title, creator:'本地导出工具'}, pageSize:'A4',pageMargins:PAGE_MARGINS,
     defaultStyle:{font:'Noto',fontSize:10,lineHeight:1.2,color:'#202c25'}, images:prepared.images, content,

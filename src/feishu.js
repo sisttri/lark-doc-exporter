@@ -12,6 +12,7 @@ const MIME_EXTENSIONS = Object.freeze({
   'image/jpg': 'jpg',
   'image/gif': 'gif',
   'image/webp': 'webp',
+  'image/svg+xml': 'svg',
 });
 const RASTER_EXTENSIONS = new Set(['png', 'jpg', 'gif', 'webp']);
 const HEADING_TYPE = /^heading([1-6])$/u;
@@ -242,6 +243,11 @@ function renderInlineNode(node, suppressBold) {
   const tag = typeof node.tagName === 'string' ? node.tagName : '';
   if (!tag) return renderInline(node.childNodes, suppressBold);
   if (isHiddenOrControl(node)) return '';
+  const equation=nodeAttr(node,'data-export-equation');
+  if(equation) {
+    return '<span data-export-equation="'+escapeText(equation)+'" data-export-display="'+
+      (nodeAttr(node,'data-export-display')==='block'?'block':'inline')+'">'+escapeText(equation)+'</span>';
+  }
   if (tag === 'br') return '<br>';
   if (tag === 'img') {
     // 行内表情：只保留 alt 文本；没有 alt 时丢弃。
@@ -255,6 +261,9 @@ function renderInlineNode(node, suppressBold) {
   }
   let wrapped = content;
   const wrappers = styleWrappers(nodeAttr(node, 'style'), suppressBold);
+  const semanticTags={b:'strong',strong:'strong',i:'em',em:'em',u:'u',s:'s',del:'s',strike:'s',code:'code',sup:'sup',sub:'sub'};
+  const semanticTag=Object.hasOwn(semanticTags,tag)?semanticTags[tag]:null;
+  if(semanticTag && !(suppressBold && semanticTag==='strong') && !wrappers.includes(semanticTag)) wrappers.unshift(semanticTag);
   for (let index = wrappers.length - 1; index >= 0; index--) {
     wrapped = '<' + wrappers[index] + '>' + wrapped + '</' + wrappers[index] + '>';
   }
@@ -381,6 +390,29 @@ export function imageHtmlPath(image) {
   return 'images/' + blockId + '.' + extension;
 }
 
+export function attachmentHtmlPath(attachment) {
+  const rawId=String(attachment?.blockId ?? 'file').normalize('NFC');
+  let id=rawId;
+  if(!/^[A-Za-z0-9_-]{1,64}$/u.test(id)) {
+    let hash=2166136261;
+    for(const character of rawId) {hash=Math.imul(hash^character.codePointAt(0),16777619)>>>0;}
+    id=(rawId.replace(/[^A-Za-z0-9_-]/gu,'').slice(0,48)||'file')+'-'+hash.toString(16).padStart(8,'0');
+  }
+  let name=String(attachment?.name ?? '附件').normalize('NFC')
+    .replace(/[\u0000-\u001f\u007f-\u009f\u2028-\u202e\u2066-\u2069<>:"/\\|?*]/gu,'_')
+    .replace(/^[. ]+|[. ]+$/gu,'') || '附件';
+  if(/^(?:con|prn|aux|nul|com[1-9¹²³]|lpt[1-9¹²³])(?:\.|$)/iu.test(name)) name='_'+name;
+  const extension=/\.[^.]{1,32}$/u.exec(name)?.[0] || '';
+  const maximum=160-id.length-1;
+  if(name.length>maximum) {
+    let stem=name.slice(0,maximum-extension.length);
+    if(/[\ud800-\udbff]$/u.test(stem)) stem=stem.slice(0,-1);
+    name=stem+extension;
+  }
+  name=name.replace(/[. ]+$/gu,'') || '附件';
+  return 'attachments/'+id+'-'+name;
+}
+
 /**
  * 把采集 JSON 转换为完整、独立、可被 importer 导入的 HTML。
  * @param {object} capture capture.json 解析结果
@@ -404,6 +436,98 @@ export function convertCapture(capture) {
   for (const image of Array.isArray(capture.images) ? capture.images : []) {
     if (image && image.blockId != null) imageByBlock.set(String(image.blockId), image);
   }
+  const attachmentByBlock=new Map();
+  for(const attachment of Array.isArray(capture.attachments)?capture.attachments:[]) {
+    if(attachment?.blockId!=null && attachment.bytes instanceof Uint8Array) attachmentByBlock.set(String(attachment.blockId),attachment);
+  }
+  const semanticByBlock=new Map(),semanticOnly=new Set();
+  const semantic=capture.semantic;
+  if(semantic?.version===1 && Array.isArray(semantic.blocks)) {
+    if(capture.source?.docToken && semantic.recordId!==capture.source.docToken) {
+      addWarning('missing_block','正文模型与采集页面不一致，未使用模型语义补充。');
+    } else {
+      warnings.push(...normalizeWarnings(semantic.warnings));
+      for(const block of semantic.blocks) {
+        if(block && typeof block.id==='string' && typeof block.type==='string' && block.ready!==false) semanticByBlock.set(block.id,block);
+      }
+    }
+  }
+  function modelFor(info) {
+    const block=semanticByBlock.get(String(info.id));
+    const recordId=info.element?nodeAttr(info.element,'data-record-id'):'';
+    return block?.type===info.type && (!recordId || !block.recordId || recordId===block.recordId) ? block : null;
+  }
+  function modelInline(model,force=false) {
+    const ops=Array.isArray(model?.ops)?model.ops:[];
+    const special=ops.some(op=>typeof op?.attributes?.equation==='string' && op.attributes.equation || op?.attributes?.mention);
+    if(!special && !force) return null;
+    if(ops.some(op=>op?.attributes?.unresolvedInline===true)) {
+      addWarning('unsupported_block','块 '+model.id+' 包含无法完整还原的内联组件，'+(force?'已保留可读源码和占位。':'保留页面正文，未使用模型整段替换。'));
+      if(!force) return null;
+    }
+    if(!ops.length) return typeof model?.text==='string'?escapeText(model.text).replace(/\r?\n/gu,'<br>'):null;
+    let html='';
+    const enabled=value=>value!==undefined && value!==null && ![false,0,'false','0'].includes(value);
+    for(const op of ops) {
+      const attributes=op?.attributes || {};
+      if(attributes.fixEnter!==undefined) continue;
+      let piece;
+      if(typeof attributes.equation==='string' && attributes.equation) {
+        const latex=attributes.equation;
+        piece='<span data-export-equation="'+escapeText(latex)+'" data-export-display="'+
+          (attributes.display==='block'?'block':'inline')+'">'+escapeText(latex)+'</span>';
+      } else {
+        const mention=attributes.mention;
+        const insert=typeof op?.insert==='string'?cleanText(op.insert).replace(/\ufffc/gu,attributes.unresolvedInline?'[未转换的内联内容]':''):
+          attributes.unresolvedInline?'[未转换的内联内容]':'';
+        const label=mention && typeof mention.title==='string' && mention.title ? mention.title:insert;
+        piece=escapeText(label).replace(/\r?\n/gu,'<br>');
+        if(enabled(attributes.inlineCode)) piece='<code>'+piece+'</code>';
+        for(const [name,tag] of [['bold','strong'],['italic','em'],['underline','u'],['strikethrough','s']]) {
+          if(enabled(attributes[name])) piece='<'+tag+'>'+piece+'</'+tag+'>';
+        }
+        const href=safeHref(mention?.url || attributes.link);
+        if(href) piece='<a href="'+escapeText(href)+'">'+piece+'</a>';
+      }
+      html+=piece;
+    }
+    return html;
+  }
+  function applyModelInline(element,force=false) {
+    const id=nodeAttr(element,'data-block-id'),type=nodeAttr(element,'data-block-type');
+    if(nodeAttr(element,'data-export-semantic-only')==='1') semanticOnly.add(id);
+    const model=modelFor({id,type,element});
+    const html=modelInline(model,force || nodeAttr(element,'data-export-semantic-only')==='1');
+    if(html!==null) {
+      const lines=[];
+      function ownLines(node) {
+        for(const child of childElements(node)) {
+          if(isHiddenOrControl(child) || nodeAttr(child,'data-block-type')) continue;
+          if(hasClass(child,'ace-line')) lines.push(child);else ownLines(child);
+        }
+      }
+      ownLines(element);
+      if(lines.length) {
+        lines[0].childNodes=parseFragment(html).childNodes;
+        for(const child of lines[0].childNodes) child.parentNode=lines[0];
+        for(const line of lines.slice(1)) line.childNodes=[];
+      } else if(['text','bullet','ordered','todo','quote','callout'].includes(type) || HEADING_TYPE.test(type)) {
+        const line=parseFragment('<div class="ace-line">'+html+'</div>').childNodes[0];
+        line.parentNode=element;
+        element.childNodes.unshift(line);
+      }
+    }
+    for(const child of childElements(element)) {
+      if(isHiddenOrControl(child)) continue;
+      if(nodeAttr(child,'data-block-type')) applyModelInline(child);else applyModelDescendants(child);
+    }
+  }
+  function applyModelDescendants(node) {
+    for(const child of childElements(node)) {
+      if(isHiddenOrControl(child)) continue;
+      if(nodeAttr(child,'data-block-type')) applyModelInline(child);else applyModelDescendants(child);
+    }
+  }
 
   function listNumber(info) {
     function findOrder(node) {
@@ -418,7 +542,8 @@ export function convertCapture(capture) {
       return null;
     }
     const order = findOrder(info.element);
-    const number = order ? Number.parseInt(textContent(order).trim(), 10) : Number.NaN;
+    const number = order ? Number.parseInt(textContent(order).trim(), 10) :
+      semanticOnly.has(info.id)?Number.parseInt(modelFor(info)?.seq,10):Number.NaN;
     return Number.isSafeInteger(number) ? number : null;
   }
 
@@ -533,12 +658,17 @@ export function convertCapture(capture) {
   function renderTodo(info) {
     const content = renderLines(info.element);
     if (!content) return null;
-    return '<p>' + (detectChecked(info.element) ? '☑ ' : '☐ ') + content + '</p>';
+    const checked=semanticOnly.has(info.id)?modelFor(info)?.done===true:detectChecked(info.element);
+    return '<p>' + (checked ? '☑ ' : '☐ ') + content + '</p>';
   }
 
   function renderCode(info) {
     const record = codeMap[info.id];
     const lines = Array.isArray(record?.lines) ? record.lines : [];
+    if(!lines.length && semanticOnly.has(info.id)) {
+      const model=modelFor(info);
+      if(typeof model?.text==='string' && model.text) return '<pre><code>'+escapeText(model.text)+'</code></pre>';
+    }
     if (!lines.length) {
       const label = '代码块 ' + info.id + ' 缺少内容';
       addWarning('missing_code', label);
@@ -608,11 +738,18 @@ export function convertCapture(capture) {
       const element = findFirstElement(info.element, (node) => node.tagName === 'img');
       alt = sanitizeImageAlt(element ? nodeAttr(element, 'alt') : '');
     }
-    return '<img src="' + escapeText(imageHtmlPath(image)) + '" alt="' + escapeText(alt) + '">';
+    const html='<img src="' + escapeText(imageHtmlPath(image)) + '" alt="' + escapeText(alt) + '">';
+    const caption=modelFor(info)?.caption;
+    return typeof caption==='string' && caption.trim() ? '<figure>'+html+'<figcaption>'+escapeText(caption).replace(/\r?\n/gu,'<br>')+'</figcaption></figure>':html;
   }
 
   function renderFile(info) {
     convertedContainers.add('file');
+    const attachment=attachmentByBlock.get(info.id);
+    if(attachment) {
+      return '<p><a href="'+escapeText(attachmentHtmlPath(attachment))+'" download="">'+
+        escapeText(typeof attachment.name==='string' && attachment.name?attachment.name:'附件')+'</a></p>';
+    }
     function visibleText(node) {
       if (node.nodeName === '#text') return cleanText(node.value || '');
       if (isHiddenOrControl(node) || ['button','toolbar','menu','menuitem'].includes(nodeAttr(node, 'role'))) return '';
@@ -637,6 +774,26 @@ export function convertCapture(capture) {
     return '<p>' + (links.length ? links.join('、') : escapeText(name)) + ' [原件未采集]</p>';
   }
 
+  function renderSource(info) {
+    const model=modelFor(info),source=model?.source;
+    if(source?.language==='mermaid' && typeof source.text==='string' && source.text.trim()) {
+      convertedContainers.add('isv');
+      return '<pre><code class="language-mermaid">'+escapeText(source.text)+'</code></pre>';
+    }
+    const items=model?.timeline;
+    if(Array.isArray(items) && items.length && items.every(item=>item &&
+      ['time','title','text'].every(name=>typeof item[name]==='string'))) {
+      convertedContainers.add('isv');
+      return '<ol>'+items.map(item=>{
+        const heading=[item.time,item.title].filter(Boolean).map(value=>escapeText(value).replace(/\r?\n/gu,'<br>')).join(' · ');
+        const body=escapeText(item.text).replace(/\r?\n/gu,'<br>');
+        return '<li>'+(heading?'<p>'+heading+'</p>':'')+(body?'<p>'+body+'</p>':'')+'</li>';
+      }).join('')+'</ol>';
+    }
+    addWarning('unsupported_block','插件块 '+info.id+' 的源码格式未识别。');
+    return null;
+  }
+
   function renderCellBlock(info) {
     switch (info.type) {
       case 'text': return renderLines(info.element) || null;
@@ -647,6 +804,7 @@ export function convertCapture(capture) {
       case 'diagram':
       case 'whiteboard': return renderImage(info);
       case 'file': return renderFile(info);
+      case 'isv': return renderSource(info);
       case 'quote':
       case 'callout': return renderQuote(info, true);
       case 'quote_container':
@@ -749,6 +907,7 @@ export function convertCapture(capture) {
       case 'diagram':
       case 'whiteboard': return renderImage(info);
       case 'file': return renderFile(info);
+      case 'isv': return renderSource(info);
       case 'table': return renderTable(info);
       case 'quote':
       case 'callout': return renderQuote(info);
@@ -774,11 +933,15 @@ export function convertCapture(capture) {
     }
     const type = typeof block.type === 'string' ? block.type : '';
     const id = String(block.id ?? '');
-    const element = parseBlock(block.html);
+    const sourceOnly=block.semanticOnly===true;
+    if(sourceOnly) semanticOnly.add(id);
+    const element = parseBlock(block.html) || (sourceOnly && semanticByBlock.get(id)?.type===type ? parseBlock(
+      '<div data-block-id="'+escapeText(id)+'" data-block-type="'+escapeText(type)+'"><div class="ace-line"></div></div>') : null);
     if (!element) {
       addWarning('unsupported_block', '块 ' + (id || '(无 id)') + ' 无法解析');
       continue;
     }
+    applyModelInline(element,sourceOnly);
     if (!['whiteboard','diagram','file'].includes(type)) normalizeRichContent(element, id, addWarning);
     infos.push({ id, type, element });
   }

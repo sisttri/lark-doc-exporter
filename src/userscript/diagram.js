@@ -1,7 +1,5 @@
+import {sanitizeSvg} from '../svg.js';
 const SVG = 'http://www.w3.org/2000/svg', XHTML = 'http://www.w3.org/1999/xhtml';
-const svgTags = new Set(['svg','g','defs','path','rect','circle','ellipse','line','polyline','polygon',
-  'text','tspan','title','desc','clipPath','linearGradient','radialGradient','stop','foreignObject']);
-const htmlTags = new Set(['div','span','strong','b','br','i','em','p']);
 
 function findDiagram(root,id,recordId) {
   const pending=[root],seen=new Set();
@@ -30,28 +28,18 @@ function dimensions(svg) {
   return {width,height};
 }
 
-// SVG is a private rendering input, never inserted into the page or exported as
-// active markup. Reject unsupported features instead of removing graph labels.
+// Keep the DOM namespace check before canonical XML validation. Nothing is
+// inserted into the host page, and unknown features never lose labels silently.
 function staticSource(svg,serializer) {
   const pending=[{node:svg,html:false,depth:0}];let count=0;
   while(pending.length) {
     const {node,html,depth}=pending.pop();
     if(++count>20_000 || depth>128) return null;
     if(node.nodeType===3 || node.nodeType===4 || node.nodeType===8) continue;
-    if(node.nodeType!==1 || node.namespaceURI!==(html?XHTML:SVG) ||
-      !(html?htmlTags:svgTags).has(node.localName)) return null;
-    for(const attribute of node.attributes) {
-      const name=attribute.name.toLowerCase(),value=attribute.value;
-      if(name==='xmlns' || name.startsWith('xmlns:')) {
-        if(![SVG,XHTML,'http://www.w3.org/1999/xlink'].includes(value)) return null;
-      } else if(attribute.namespaceURI && attribute.namespaceURI!=='http://www.w3.org/XML/1998/namespace') return null;
-      if(name.startsWith('on') || /(?:^|:)(?:href|src)$/u.test(name) ||
-        /[\\\u0000-\u001f]|(?:url|image(?:-set)?|cross-fade|element|paint)\s*\(|@import|expression\s*\(|javascript\s*:|(?:animation|transition|behavior|binding)\s*:/iu.test(value)) return null;
-    }
+    if(node.nodeType!==1 || node.namespaceURI!==(html?XHTML:SVG)) return null;
     for(const child of node.childNodes) pending.push({node:child,html:html || node.localName==='foreignObject',depth:depth+1});
   }
-  const source=serializer.serializeToString(svg);
-  return typeof source==='string' && source.length<=2*1024*1024 ? source : null;
+  return sanitizeSvg(serializer.serializeToString(svg))?.source || null;
 }
 
 async function decode(image,checkStop) {
@@ -117,7 +105,11 @@ export async function captureDiagram(document,id,{pageView=typeof unsafeWindow==
     if(typeof dataUrl!=='string' || dataUrl.length>32*1024*1024+64 ||
       !/^data:image\/png;base64,[A-Za-z0-9+/]+={0,2}$/u.test(dataUrl) || !belongsToPage() ||
       staticSource(view.getSvg(),serializer)!==original) return null;
-    return {blockId:id,mime:'image/png',width,height,alt:'流程图',dataUrl};
+    const bytes=new TextEncoder().encode(original),parts=[];
+    for(let offset=0;offset<bytes.length;offset+=16384) parts.push(String.fromCharCode(...bytes.subarray(offset,offset+16384)));
+    return {blockId:id,mime:'image/svg+xml',width:size.width,height:size.height,alt:'流程图',
+      dataUrl:'data:image/svg+xml;base64,'+btoa(parts.join('')),
+      rasterFallback:{mime:'image/png',width,height,dataUrl}};
   } catch(error) {
     if(error?.name==='AbortError') throw error;
     return null;

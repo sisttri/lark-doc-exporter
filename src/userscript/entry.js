@@ -1,10 +1,11 @@
-import { convertCapture, imageHtmlPath } from '../feishu.js';
+import { convertCapture, imageHtmlPath, attachmentHtmlPath } from '../feishu.js';
 import { readDocumentParts } from '../importer.js';
 import * as formats from '../formats.js';
 import { safeStem, warningLabel } from '../shared.js';
 import { capturePage, readDocumentSource } from './capture.js';
 import { css } from './entry-style.js';
 import { installTheme } from './theme.js';
+import { downloadFile } from './download.js';
 
 const prefix = 'feishu-local-export-';
 const formatKey = prefix + 'formats';
@@ -28,7 +29,7 @@ export function installPageExporter(view, {
   let previousToken = '', previousRoot = null, waitStarted = 0, waitingTimer = null;
   let source, ready = false, chooserOpen = false, cardOpen = false;
   let task = null, snapshot = null, snapshotOwner = null, result = null, pdfNotes = [];
-  let lastRun = null, failed = false, noticeId = 0, mode = 'fresh';
+  let lastRun = null, pendingDownload = null, failed = false, noticeId = 0, mode = 'fresh';
   let snapshotAt = '', outcome = 'idle', unreadNotice = false, pointerInside = false;
   let keyboardMode = false, visible = false, visibilityAnimation = null, screen = '';
   let launcherState = '', drag = null, suppressClick = false, position = .62;
@@ -126,11 +127,8 @@ export function installPageExporter(view, {
   const cancel = button('cancel', '取消保存', () => {
     if (task) { task.cancelled = true; cancel.disabled = true; status.textContent = '正在取消…'; }
   });
-  const retry = button('retry', '重试', () => run(lastRun?.reuse || false, lastRun?.kinds));
-  const redownload = button('redownload', '重新下载此文件', () => {
-    syncPage();
-    if (result && !task && belongsToPage(snapshotOwner)) download(result.blob, result.filename);
-  });
+  const retry = button('retry', '重试', () => pendingDownload ? retryDownload(pendingDownload) : run(lastRun?.reuse || false, lastRun?.kinds));
+  const redownload = button('redownload', '重新下载此文件', () => retryDownload(result));
   redownload.className = 'quiet'; cancel.className = 'quiet';
   actions.append(dismiss, cancel, retry);
   card.append(cardHeader, bar, status, actions);
@@ -267,7 +265,7 @@ export function installPageExporter(view, {
     return owner.key === current.key && owner.token === (current.docToken || '');
   }
   function clearResult() {
-    snapshot = null; snapshotOwner = null; snapshotAt = ''; result = null; pdfNotes = []; lastRun = null; failed = false;
+    snapshot = null; snapshotOwner = null; snapshotAt = ''; result = null; pdfNotes = []; lastRun = null; pendingDownload = null; failed = false;
     outcome = 'idle'; unreadNotice = false; mode = 'fresh';
     resultBox.replaceChildren(); warnings.replaceChildren(); warnings.hidden = true;
     status.textContent = '';
@@ -311,11 +309,32 @@ export function installPageExporter(view, {
   async function yieldForCancel(op) {
     await new Promise(resolve => view.setTimeout(resolve, 0)); check(op);
   }
-  function download(blob, filename) {
-    const url = view.URL.createObjectURL(blob);
-    const link = element('a'); link.href = url; link.download = filename;
-    document.body.append(link); link.click(); link.remove();
-    view.setTimeout(() => view.URL.revokeObjectURL(url), 60000);
+  function retryDownload(file) {
+    syncPage();
+    if (!file || task || !belongsToPage(snapshotOwner)) return;
+    noticeId++; chooserOpen = false; cardOpen = true; history.open = true;
+    const documentPending = Boolean(result && pendingDownload === result);
+    try {
+      downloadFile(view, file.blob, file.filename);
+      if (file !== result && documentPending) {
+        status.textContent = '提示文件已交给浏览器保存。文档文件尚未交给浏览器，请重试下载。';
+      } else {
+        pendingDownload = null; failed = false;
+        const partial = warningLines().length > 0;
+        outcome = partial ? 'partial' : 'success'; unreadNotice = partial;
+        heading.textContent = partial ? '部分保存，请核对' : '文件已生成';
+        status.textContent = partial ? '部分保存。已交给浏览器保存，请查看内容提示。' : '已交给浏览器保存。';
+        if (file !== result) {
+          heading.textContent = '提示文件已生成'; status.textContent = '提示文件已交给浏览器保存。';
+        }
+      }
+    } catch (error) {
+      if (!documentPending || file === result) pendingDownload = file;
+      failed = true; outcome = 'failed'; unreadNotice = true;
+      heading.textContent = '保存失败';
+      status.textContent = '保存失败：' + error.message + '已生成的文件仍可重试下载。';
+    }
+    controls();
   }
   function warningLines() {
     return [...(snapshot?.warnings || []).map(({code, label}) => warningLabel(code) + (label ? ' · ' + label : '')), ...pdfNotes];
@@ -330,7 +349,7 @@ export function installPageExporter(view, {
       button('report', '下载完整提示', () => {
         syncPage();
         if (snapshot && !task && belongsToPage(snapshotOwner)) {
-          download(new Blob([warningLines().join('\n') + '\n'], {type:'text/plain;charset=utf-8'}), safeStem(snapshot.title) + '-保存提示.txt');
+          retryDownload({blob:new Blob([warningLines().join('\n') + '\n'], {type:'text/plain;charset=utf-8'}), filename:safeStem(snapshot.title) + '-保存提示.txt'});
         }
       }));
   }
@@ -358,15 +377,27 @@ export function installPageExporter(view, {
     check(op);
     status.textContent = '正在整理正文和素材…'; bar.removeAttribute('value');
     await yieldForCancel(op);
-    const converted = convertCapture(raw);
     const assets = [];
-    for (const image of raw.images) {
-      const data = /^data:image\/png;base64,(.+)$/u.exec(image.dataUrl || '');
-      if (!data) continue;
-      const binary = atob(data[1]); const bytes = new Uint8Array(binary.length);
+    function imageData(image) {
+      const data = /^data:(image\/(?:png|jpeg|gif|webp|svg\+xml));base64,(.+)$/iu.exec(image?.dataUrl || '');
+      if (!data) return null;
+      const binary = atob(data[2]); const bytes = new Uint8Array(binary.length);
       for (let i = 0; i < bytes.length; i++) bytes[i] = binary.charCodeAt(i);
-      assets.push({path:imageHtmlPath(image), bytes});
+      return {mime:data[1].toLowerCase(), bytes};
     }
+    const images = raw.images.map(image => {
+      const data = imageData(image);
+      if (!data) return image;
+      const normalized = {...image, mime:data.mime};
+      const fallback = imageData(image.rasterFallback);
+      assets.push({path:imageHtmlPath(normalized), bytes:data.bytes,
+        ...(fallback ? {rasterFallback:{bytes:fallback.bytes}} : {})});
+      return normalized;
+    });
+    for (const attachment of raw.attachments || []) {
+      if (attachment?.bytes instanceof Uint8Array) assets.push({path:attachmentHtmlPath(attachment), bytes:attachment.bytes});
+    }
+    const converted = convertCapture({...raw, images});
     const next = await readDocumentParts({html:converted.html, assets, name:'capture'});
     check(op); return next;
   }
@@ -376,7 +407,7 @@ export function installPageExporter(view, {
     if (task || !ready || !kinds.length) return;
     if (reuse && (!snapshot || !belongsToPage(snapshotOwner))) return;
     const op = {key:pageKey, token:documentToken, cancelled:false};
-    task = op; lastRun = {reuse, kinds:[...kinds]}; failed = false; outcome = 'idle'; unreadNotice = false; noticeId++;
+    task = op; lastRun = {reuse, kinds:[...kinds]}; pendingDownload = null; failed = false; outcome = 'idle'; unreadNotice = false; noticeId++;
     chooserOpen = false; cardOpen = true; heading.textContent = '正在保存';
     warnings.hidden = true; controls();
     try {
@@ -411,7 +442,7 @@ export function installPageExporter(view, {
       snapshot = working; snapshotOwner = op; snapshotAt = readAt; result = next;
       pdfNotes = (pdf?.notes || []).map(note => warningLabel('pdf_conversion_note') + ' · ' + note);
       showResult(next); showWarnings();
-      download(next.blob, next.filename);
+      downloadFile(view, next.blob, next.filename);
       const partial = warningLines().length > 0;
       outcome = partial ? 'partial' : 'success'; unreadNotice = partial; history.open = true;
       heading.textContent = partial ? '部分保存，请核对' : '文件已生成';
@@ -431,7 +462,8 @@ export function installPageExporter(view, {
         outcome = failed ? 'failed' : 'cancelled'; unreadNotice = failed; history.open = true;
         heading.textContent = failed ? '保存失败' : '已取消';
         status.textContent = failed ? '保存失败：' + error.message : '保存已取消。';
-        if (result) status.textContent += '上次保存的文件仍可下载。';
+        if (error.code === 'download_blocked') pendingDownload = result;
+        if (result) status.textContent += pendingDownload ? '已生成的文件仍可重试下载。' : '上次保存的文件仍可下载。';
         showWarnings();
       }
     } finally {

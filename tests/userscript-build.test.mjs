@@ -11,6 +11,7 @@ import {resolveObjectURL} from 'node:buffer';
 import vm from 'node:vm';
 import {unzipSync} from 'fflate';
 import {readEmbeddedFont} from '../src/userscript/pdf-fonts.js';
+import {validFontCoverage,missingEmojiGlyphs} from '../src/pdf-emoji.js';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const run = promisify(execFile);
@@ -45,10 +46,19 @@ test('assets-only emits the original PDF engine and exact font bytes without a u
     assert.ok(engine.includes(await fs.readFile(path.join(root, 'node_modules/pdfmake/build', file), 'utf8')));
   }
   const archive = JSON.parse(await fs.readFile(path.join(fixture, assets.fonts.file), 'utf8'));
-  assert.deepEqual(archive.map(font => font.name), ['Regular.woff2', 'Bold.woff2']);
-  for (const font of archive) {
-    assert.deepEqual(Buffer.from(await readEmbeddedFont(font)), await fs.readFile(path.join(root, 'fonts', 'NotoSansCJKsc-' + font.name)));
+  const expectedFonts = [['Regular.woff2','NotoSansCJKsc-Regular.woff2'],['Bold.woff2','NotoSansCJKsc-Bold.woff2'],
+    ['Emoji.ttf','NotoEmoji-Regular.ttf'],['Symbols.ttf','NotoSansSymbols2-Regular.ttf']];
+  assert.deepEqual(archive.map(font => font.name), expectedFonts.map(([name]) => name));
+  for (const [name,file] of expectedFonts) {
+    const font = archive.find(font => font.name === name);
+    assert.deepEqual(Buffer.from(await readEmbeddedFont(font)), await fs.readFile(path.join(root, 'fonts', file)));
+    if (name.endsWith('.ttf')) assert.equal(validFontCoverage(font.coverage),true,name);
+    else assert.equal(font.coverage,undefined);
   }
+  const coverage = {NotoEmoji:archive.find(font => font.name === 'Emoji.ttf').coverage,
+    NotoSymbols:archive.find(font => font.name === 'Symbols.ttf').coverage};
+  assert.deepEqual(missingEmojiGlyphs('✨ ☐ ☑ ☒ 😀 ❤️ 👩‍💻 🇨🇳 1️⃣',coverage),[]);
+  assert.deepEqual(missingEmojiGlyphs('🫩',coverage),['🫩']);
   await assert.rejects(fs.access(path.join(fixture, 'lark-doc-exporter.user.js')), {code:'ENOENT'});
 });
 
@@ -84,8 +94,8 @@ test('production build requires immutable URLs and matching hashes, then emits a
   assert.ok(source.includes('Redistribution and use in source and binary forms'));
   assert.ok(source.includes('SIL OPEN FONT LICENSE Version 1.1'));
   assert.ok(source.includes('must be distributed entirely under this license'));
-  for (const file of ['LICENSE', 'licenses/JavaScript-notices.txt', 'licenses/Noto-OFL.txt']) {
-    assert.ok(source.includes(await fs.readFile(path.join(fixture, file), 'utf8')), file + ' must be readable in the standalone script');
+  for (const file of ['LICENSE', 'licenses/JavaScript-notices.txt', 'licenses/Noto-OFL.txt', 'licenses/Noto-Emoji-OFL.txt', 'licenses/Noto-Symbols-OFL.txt']) {
+    assert.ok(source.includes((await fs.readFile(path.join(fixture, file), 'utf8')).replace(/[\t ]+$/gm,'')), file + ' must be readable in the standalone script');
   }
   const installer = unzipSync(await fs.readFile(path.join(fixture, '飞书文档导出工具-0.0.1.zip')));
   assert.equal(Buffer.from(installer['飞书文档导出工具.user.js']).toString(), source);
@@ -105,7 +115,11 @@ test('production build requires immutable URLs and matching hashes, then emits a
       const scope = {...globals, postMessage:data => queueMicrotask(() => { if (!this.terminated) this.onmessage?.({data}); })};
       scope.self = scope;
       this.scope = scope;
-      this.ready = resolveObjectURL(url).text().then(workerSource => vm.runInNewContext(workerSource, scope));
+      this.ready = resolveObjectURL(url).text().then(workerSource => {
+        vm.runInNewContext(workerSource, scope);
+        const createPdf = scope.pdfMake.createPdf;
+        scope.pdfMake.createPdf = definition => { this.definition=definition; return createPdf.call(scope.pdfMake,definition); };
+      });
     }
     postMessage(message) {
       this.ready.then(() => this.scope.onmessage({data:message})).catch(error => this.onerror?.({error, preventDefault(){}}));
@@ -117,14 +131,30 @@ test('production build requires immutable URLs and matching hashes, then emits a
   vm.runInNewContext(executable, sandbox);
   const pdf = await sandbox.__renderPdf({title:'中文导出验证', blocks:[
     {tag:'h1', children:['中文标题']},
-    {tag:'p', children:['常规中文 ', {tag:'strong', children:['粗体中文']}]},
-    {tag:'pre', children:['const answer = 42;\n中文代码注释']},
+    {tag:'p', children:['常规中文 ✨ ☐ ', {tag:'strong', children:['粗体中文 👩‍💻 ☑']}]},
+    {tag:'p', children:[{tag:'em',children:[{tag:'a',href:'https://example.org/document',children:['链接 ❤️']}]}]},
+    {tag:'table',children:[{tag:'tr',children:[{tag:'th',children:['☒ 表头']}]}]},
+    {tag:'pre', children:['const answer = 42;\n中文代码注释 ✅']},
+    {tag:'p',children:['未来表情 🫩 ',{tag:'span',equation:'x^2 + 1',display:'inline',children:['x^2 + 1']}]},
   ], assets:[], warnings:[]}, {onProgress:stage => stages.push(stage)});
   assert.equal(pdf.filename, '中文导出验证.pdf');
   assert.equal(pdf.blob.type, 'application/pdf');
   const pdfBytes = Buffer.from(await pdf.blob.arrayBuffer());
   assert.match(pdfBytes.subarray(0, 8).toString(), /^%PDF-/);
   assert.ok(pdfBytes.length > 2000);
+  const fontRuns = [];
+  function visit(node) {
+    if (!node || typeof node !== 'object') return;
+    if (node.font && node.text !== undefined) fontRuns.push(node);
+    Object.values(node).forEach(visit);
+  }
+  visit(workers[0].definition);
+  assert.ok(fontRuns.some(run => run.font === 'NotoEmoji' && JSON.stringify(run.text).includes('✨')));
+  assert.ok(fontRuns.some(run => run.font === 'NotoSymbols' && JSON.stringify(run.text).includes('☐')));
+  assert.ok(fontRuns.some(run => run.font === 'NotoEmoji' && JSON.stringify(run.text).includes('✅')));
+  assert.equal(pdf.notes.length,2);
+  assert.ok(pdf.notes.some(note => /1.*公式.*源码/u.test(note)));
+  assert.ok(pdf.notes.some(note => /U\+1FAE9/u.test(note)));
   assert.deepEqual(stages, ['准备 PDF 字体', '排版图片与正文', '生成 PDF']);
   assert.equal(workers[0].terminated, true);
 });

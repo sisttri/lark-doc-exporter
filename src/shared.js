@@ -15,6 +15,7 @@ export const warnings = {
   duplicate_image:'图片路径重复', code_tail_unconfirmed:'未能确认代码末行', capture_step_limit:'未能确认文末',
   table_cell_unconfirmed:'未能确认表格单元格内容', table_structure_unconfirmed:'未能确认表格结构',
   capture_content_changed:'采集期间内容发生变化，请重新保存核对',
+  source_fallback:'已从本页源结构补全正文',
   pdf_conversion_note:'PDF 转换提示'
 };
 export function warningLabel(code) { return warnings[code] || '内容已简化'; }

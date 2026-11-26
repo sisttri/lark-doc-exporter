@@ -1,6 +1,7 @@
 import { defaultTreeAdapter, parse } from 'parse5';
 import { warningMarker, warnings as warningTypes } from './shared.js';
 import { readCellStyle, readTableColumnWidths } from './table-style.js';
+import {sanitizeSvg} from './svg.js';
 
 const MiB = 1024 * 1024;
 export const limits = { html: 8 * MiB, entry: 24 * MiB, expanded: 48 * MiB, entries: 384 };
@@ -13,7 +14,7 @@ export const visibleTags = new Set((
 ).split(' '));
 const omittedTags = new Set('script style template noscript title link meta base source track param area'.split(' '));
 const unsupportedTags = new Set('iframe frame frameset object embed video audio canvas input button select textarea form'.split(' '));
-const rasterExtensions = { 'image/png': 'png', 'image/jpeg': 'jpg', 'image/gif': 'gif', 'image/webp': 'webp' };
+const imageExtensions = { 'image/png': 'png', 'image/jpeg': 'jpg', 'image/gif': 'gif', 'image/webp': 'webp', 'image/svg+xml':'svg' };
 
 const crcTable = Uint32Array.from({ length: 256 }, (_, n) => {
   for (let i = 0; i < 8; i++) n = (n >>> 1) ^ ((n & 1) ? 0xedb88320 : 0);
@@ -108,7 +109,7 @@ function validatePaths(entries) {
   }
 }
 
-function imageDimensions(bytes) {
+export function imageDimensions(bytes) {
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   const ascii = (start, end) => String.fromCharCode(...bytes.subarray(start, end));
   const be16 = (offset) => view.getUint16(offset);
@@ -209,6 +210,11 @@ function attr(node, name) {
   return node.attrs?.find((item) => item.name === name && !item.namespace)?.value ?? '';
 }
 
+export function equationSource(value) {
+  return typeof value === 'string' && value.length <= 16_384 && value.trim() &&
+    !/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f-\u009f]/u.test(value) ? value : '';
+}
+
 function joinText(items) {
   const result = [];
   for (const item of items) {
@@ -237,7 +243,7 @@ function preservedWarnings(serialized) {
   }
 }
 
-async function documentModel(html, files, fallback) {
+async function documentModel(html, files, fallback, rasterFallbacks) {
   const document = boundedHtml(html);
   const root = document.childNodes.find(({ tagName }) => tagName === 'html');
   const head = root.childNodes.find(({ tagName }) => tagName === 'head');
@@ -252,6 +258,7 @@ async function documentModel(html, files, fallback) {
   const importedWarningLocations = new Set(cachedWarnings.filter(item => item.label)
     .map(({ code, label }) => code + '\0' + label));
   const occupiedPaths = new Set();
+  const invalidSvgPaths = new Set();
   let embedded = 0;
   let firstHeading = '';
   let nodes = 0;
@@ -259,15 +266,38 @@ async function documentModel(html, files, fallback) {
   for (const [path, bytes] of files) {
     if (path === 'document.html') continue;
     const role = path.startsWith('images/') ? 'image' : 'attachment';
-    const type = role === 'image' ? await rasterType(bytes) : '';
-    totalBytes += bytes.length;
-    assets.set(path, { path, type: type || 'application/octet-stream', bytes, role });
+    const rasterFallback = rasterFallbacks.get(path);
+    totalBytes += bytes.length + (rasterFallback?.length || 0);
     let occupied = path.toLowerCase();
     while (!occupiedPaths.has(occupied)) {
       occupiedPaths.add(occupied);
       const separator = occupied.lastIndexOf('/');
       if (separator < 0) break;
       occupied = occupied.slice(0, separator);
+    }
+    const svg = role === 'image' && (/\.svg$/iu.test(path) || /<svg(?:\s|>)/iu.test(new TextDecoder().decode(bytes.subarray(0,1024))));
+    if (svg) {
+      let checked;
+      try { checked = sanitizeSvg(utf8.decode(bytes)); } catch {}
+      if (!checked) {
+        invalidSvgPaths.add(path);
+        if (!importedWarningLocations.has('invalid_image\0' + path)) warnings.push({code:'invalid_image',label:path});
+        importedWarningLocations.add('invalid_image\0' + path);
+        continue;
+      }
+      const retained = new TextEncoder().encode(checked.source);
+      totalBytes += retained.length - bytes.length;
+      if (retained.length + (rasterFallback?.length || 0) > limits.entry || totalBytes > limits.expanded) throw inputLimit();
+      const asset = {path,type:'image/svg+xml',bytes:retained,role};
+      if (rasterFallback) {
+        if (await rasterType(rasterFallback) === 'image/png') asset.rasterFallback = {type:'image/png',bytes:rasterFallback};
+        else warnings.push({code:'invalid_image',label:path + '（PDF 静态预览）'});
+      }
+      assets.set(path,asset);
+    } else {
+      if (rasterFallback) throw invalidInput();
+      const type = role === 'image' ? await rasterType(bytes) : '';
+      assets.set(path, { path, type: type || 'application/octet-stream', bytes, role });
     }
   }
 
@@ -284,17 +314,23 @@ async function documentModel(html, files, fallback) {
     const alt = attr(node, 'alt').slice(0, 2048);
     const label = alt ? '图片：' + alt : '图片';
     if (/^data:/iu.test(raw)) {
-      const data = /^data:(image\/(?:png|jpeg|gif|webp));base64,([a-z0-9+/]+={0,2})$/iu.exec(raw);
+      const data = /^data:(image\/(?:png|jpeg|gif|webp|svg\+xml));base64,([a-z0-9+/]+={0,2})$/iu.exec(raw);
       if (!data) return note('invalid_image', '无效' + label);
       const encoded = data[2];
       if (encoded.length > (limits.entry * 4) / 3 || totalBytes + encoded.length * 3 / 4 > limits.expanded ||
         assets.size + 1 >= limits.entries) return note('invalid_image', '无效' + label);
       try {
-        const bytes = Uint8Array.from(atob(encoded), (character) => character.charCodeAt(0));
-        const type = await rasterType(bytes);
+        let bytes = Uint8Array.from(atob(encoded), (character) => character.charCodeAt(0));
+        let type;
+        if (data[1].toLowerCase() === 'image/svg+xml') {
+          const checked = sanitizeSvg(utf8.decode(bytes));
+          if (!checked) return note('invalid_image', '无效' + label);
+          bytes = new TextEncoder().encode(checked.source); type = 'image/svg+xml';
+          if (bytes.length > limits.entry || totalBytes + bytes.length > limits.expanded) return note('invalid_image', '无效' + label);
+        } else type = await rasterType(bytes);
         if (!type || data[1].toLowerCase() !== type) return note('invalid_image', '无效' + label);
         let path;
-        do { path = 'images/embedded-' + ++embedded + '.' + rasterExtensions[type]; } while (occupiedPaths.has(path));
+        do { path = 'images/embedded-' + ++embedded + '.' + imageExtensions[type]; } while (occupiedPaths.has(path));
         occupiedPaths.add(path);
         assets.set(path, { path, type, bytes, role: 'image' });
         totalBytes += bytes.length;
@@ -306,6 +342,7 @@ async function documentModel(html, files, fallback) {
     if (/^(?:\/\/|[a-z][a-z\d+.-]*:)/iu.test(raw)) return note('remote_image', '未加载外部' + label);
     const path = localPath(raw);
     const asset = assets.get(path);
+    if (invalidSvgPaths.has(path)) return note('invalid_image', '无效' + label, null, path);
     if (asset?.role === 'image' && asset.type.startsWith('image/')) return { tag: 'img', path, alt };
     if (asset?.role === 'image') return note('invalid_image', '无效' + label, null, path);
     return note('missing_image', '缺少' + label, null, path);
@@ -329,6 +366,11 @@ async function documentModel(html, files, fallback) {
       }
       if (tag === 'img') {
         result.push(await readImage(node));
+        continue;
+      }
+      const equation = tag === 'span' ? equationSource(attr(node, 'data-export-equation')) : '';
+      if (equation) {
+        result.push({tag, equation, display:attr(node, 'data-export-display') === 'block' ? 'block' : 'inline', children:[equation]});
         continue;
       }
       const children = await readNodes(node.childNodes ?? [], depth + 1);
@@ -412,17 +454,22 @@ export async function readDocumentParts({html, assets = [], name = '文档'} = {
       throw inputError('invalid_input', '素材路径或字节数据无效。');
     }
     const path = assetPath(asset.path);
-    expanded += asset.bytes.length;
-    if (asset.bytes.length > limits.entry || expanded > limits.expanded) throw inputLimit();
-    entries.push({path, bytes:asset.bytes});
+    const rasterFallback = asset.rasterFallback;
+    if (rasterFallback !== undefined && (!rasterFallback || !(rasterFallback.bytes instanceof Uint8Array) ||
+      !path.startsWith('images/'))) throw invalidInput();
+    const size = asset.bytes.length + (rasterFallback?.bytes.length || 0);
+    expanded += size;
+    if (size > limits.entry || expanded > limits.expanded) throw inputLimit();
+    entries.push({path, bytes:asset.bytes, rasterFallback:rasterFallback?.bytes});
   }
   validatePaths(entries);
   // Snapshot before documentModel first awaits image validation. External views
   // (including Buffer/subarrays) cannot later mutate the retained document.
-  const files = new Map();
-  for (const {path,bytes} of entries) {
+  const files = new Map(), rasterFallbacks = new Map();
+  for (const {path,bytes,rasterFallback} of entries) {
     const owned = path === 'document.html' && typeof html === 'string';
     files.set(path, owned ? bytes : new Uint8Array(bytes));
+    if (rasterFallback) rasterFallbacks.set(path,new Uint8Array(rasterFallback));
   }
-  return documentModel(decodeHtml(files.get('document.html')), files, typeof name === 'string' ? name : '文档');
+  return documentModel(decodeHtml(files.get('document.html')), files, typeof name === 'string' ? name : '文档', rasterFallbacks);
 }
