@@ -37,6 +37,21 @@ test('SVG 支持有限的本地 use 与裁剪，不读取外部资源', () => {
   assert.match(result.source,/xmlns="http:\/\/www.w3.org\/2000\/svg"/u);
 });
 
+test('原生流程图的SVG版本与静态pointer-events属性保留且不丢失XHTML标签',()=>{
+  const source='<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" version="1.1" width="120" height="80" viewBox="0 0 120 80">'+
+    '<rect width="120" height="80" fill="#fff" pointer-events="all"/>'+
+    '<foreignObject width="120" height="80" pointer-events="none" style="overflow:visible">'+
+    '<div xmlns="http://www.w3.org/1999/xhtml" style="display:flex;align-items:center;justify-content:center;pointer-events:none"><strong>Anonymous label</strong></div>'+
+    '</foreignObject><path d="M0 0 L120 80" pointer-events="stroke"/></svg>';
+  const checked=sanitizeSvg(source);assert.ok(checked);
+  assert.match(checked.source,/version="1\.1"/u);
+  assert.match(checked.source,/<rect[^>]*pointer-events="all"/u);
+  assert.match(checked.source,/<foreignObject[^>]*pointer-events="none"/u);
+  assert.match(checked.source,/<path[^>]*pointer-events="stroke"/u);
+  assert.match(checked.source,/<strong>Anonymous label<\/strong>/u);
+  assert.deepEqual(sanitizeSvg(checked.source),checked);
+});
+
 test('SVG 静态文字属性和十六进制颜色不被当作可执行 CSS 或指数尺寸', () => {
   const source='<svg width="20" height="20" viewBox="0 0 20 20" aria-label="mail@example.invalid">'+
     '<foreignObject width="20" height="20"><div xmlns="http://www.w3.org/1999/xhtml" title="Use url(example) as text" '+

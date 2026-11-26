@@ -8,7 +8,7 @@ const svgTags=new Set(('svg g defs symbol path rect circle ellipse line polyline
   'clipPath mask linearGradient radialGradient stop marker use foreignObject').split(' '));
 const htmlTags=new Set(('div span strong b br i em p u s del sub sup small code pre blockquote ul ol li '+
   'table caption thead tbody tfoot tr td th colgroup col h1 h2 h3 h4 h5 h6').split(' '));
-const svgAttributes=new Set(('id class x y x1 y1 x2 y2 cx cy r rx ry width height d points pathLength transform '+
+const svgAttributes=new Set(('id class version pointer-events x y x1 y1 x2 y2 cx cy r rx ry width height d points pathLength transform '+
   'viewBox preserveAspectRatio fill fill-opacity fill-rule stroke stroke-width stroke-opacity stroke-linecap '+
   'stroke-linejoin stroke-miterlimit stroke-dasharray stroke-dashoffset opacity paint-order vector-effect '+
   'font-family font-size font-weight font-style font-variant letter-spacing word-spacing text-anchor '+

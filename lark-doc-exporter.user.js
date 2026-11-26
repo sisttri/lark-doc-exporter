@@ -11173,7 +11173,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
   var MAX_EXPANDED = 6e4;
   var svgTags = new Set("svg g defs symbol path rect circle ellipse line polyline polygon text tspan title desc clipPath mask linearGradient radialGradient stop marker use foreignObject".split(" "));
   var htmlTags = new Set("div span strong b br i em p u s del sub sup small code pre blockquote ul ol li table caption thead tbody tfoot tr td th colgroup col h1 h2 h3 h4 h5 h6".split(" "));
-  var svgAttributes = new Set("id class x y x1 y1 x2 y2 cx cy r rx ry width height d points pathLength transform viewBox preserveAspectRatio fill fill-opacity fill-rule stroke stroke-width stroke-opacity stroke-linecap stroke-linejoin stroke-miterlimit stroke-dasharray stroke-dashoffset opacity paint-order vector-effect font-family font-size font-weight font-style font-variant letter-spacing word-spacing text-anchor dominant-baseline alignment-baseline baseline-shift dx dy textLength lengthAdjust clip-path clip-rule clipPathUnits mask maskUnits maskContentUnits gradientUnits gradientTransform spreadMethod offset stop-color stop-opacity marker-start marker-mid marker-end markerWidth markerHeight refX refY orient markerUnits overflow display visibility direction unicode-bidi style href aria-label role xml:space xml:lang".split(" "));
+  var svgAttributes = new Set("id class version pointer-events x y x1 y1 x2 y2 cx cy r rx ry width height d points pathLength transform viewBox preserveAspectRatio fill fill-opacity fill-rule stroke stroke-width stroke-opacity stroke-linecap stroke-linejoin stroke-miterlimit stroke-dasharray stroke-dashoffset opacity paint-order vector-effect font-family font-size font-weight font-style font-variant letter-spacing word-spacing text-anchor dominant-baseline alignment-baseline baseline-shift dx dy textLength lengthAdjust clip-path clip-rule clipPathUnits mask maskUnits maskContentUnits gradientUnits gradientTransform spreadMethod offset stop-color stop-opacity marker-start marker-mid marker-end markerWidth markerHeight refX refY orient markerUnits overflow display visibility direction unicode-bidi style href aria-label role xml:space xml:lang".split(" "));
   var htmlAttributes = new Set("id class style title dir lang width height colspan rowspan aria-label role xml:space xml:lang".split(" "));
   var cssProperties = new Set("display overflow overflow-x overflow-y text-align vertical-align align-items align-content align-self justify-content flex flex-direction flex-wrap flex-grow flex-shrink flex-basis gap row-gap column-gap width height min-width min-height max-width max-height margin margin-top margin-right margin-bottom margin-left padding padding-top padding-right padding-bottom padding-left box-sizing font font-family font-size font-weight font-style font-variant font-stretch color background background-color line-height letter-spacing word-spacing white-space white-space-collapse text-wrap text-wrap-mode text-wrap-style word-break word-wrap overflow-wrap text-decoration text-decoration-line text-decoration-color text-decoration-style text-indent text-transform border border-width border-style border-color border-radius border-collapse border-spacing pointer-events opacity fill fill-opacity fill-rule stroke stroke-width stroke-opacity stroke-linecap stroke-linejoin stroke-dasharray stroke-dashoffset clip-path clip-rule mask transform transform-origin visibility".split(" "));
   var functions = /* @__PURE__ */ new Set(["rgb", "rgba", "hsl", "hsla", "matrix", "translate", "translatex", "translatey", "scale", "scalex", "scaley", "rotate", "skewx", "skewy"]);
@@ -14326,6 +14326,21 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
     visit(fragment);
     return { fingerprint: JSON.stringify(tokens), text: texts.join(""), nested };
   }
+  function modelContentSignature(block) {
+    if (!Array.isArray(block.ops)) return JSON.stringify(block);
+    const ops = [];
+    let previousAttributes = null;
+    for (const op of block.ops) {
+      const attributes = op.attributes || {};
+      const atomic = ["equation", "mention", "unresolvedInline", "fixEnter"].some((name) => Object.hasOwn(attributes, name));
+      const signature = atomic ? null : JSON.stringify(attributes);
+      const previous = ops.at(-1);
+      if (signature !== null && signature === previousAttributes && previous) previous.insert += op.insert;
+      else ops.push({ insert: op.insert, attributes });
+      previousAttributes = signature;
+    }
+    return JSON.stringify({ ...block, ops });
+  }
   function abortError() {
     return Object.assign(new Error("已取消"), { name: "AbortError" });
   }
@@ -15271,7 +15286,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
         const before = new Map((boundInitial?.blocks || []).map((block) => [block.id, block]));
         for (const block of semantic.blocks) {
           const previous = before.get(block.id);
-          if (previous?.ready && block.ready && JSON.stringify(previous) !== JSON.stringify(block)) contentChanged(block.id, "正文源块");
+          if (previous?.ready && block.ready && modelContentSignature(previous) !== modelContentSignature(block)) contentChanged(block.id, "正文源块");
         }
         if (boundInitial && JSON.stringify(boundInitial.roots) !== JSON.stringify(semantic.roots)) contentChanged(pageId, "正文结构");
         const sourceTypes = /* @__PURE__ */ new Set(["text", "heading1", "heading2", "heading3", "heading4", "heading5", "heading6", "bullet", "ordered", "todo", "code", "divider", "isv"]);
@@ -15763,7 +15778,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
   var prefix = "feishu-local-export-";
   var formatKey = prefix + "formats";
   var choices = [["markdown", "Markdown"], ["html", "HTML"], ["pdf", "PDF"], ["attachments", "素材包"]];
-  var descriptions = ["便于编辑 · 含图片", "浏览器直接打开", "阅读与打印", "已采集图片与清单"];
+  var descriptions = ["便于编辑 · 含素材", "浏览器直接打开", "阅读与打印", "图片、附件与清单"];
   async function defaultPdf(snapshot, options) {
     const { renderPdf: renderPdf2 } = await Promise.resolve().then(() => ((init_pdf(), pdf_exports)));
     return renderPdf2(snapshot, options);
@@ -16100,7 +16115,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
       captureNote.hidden = mode === "reuse";
       snapshotNote.textContent = "使用 " + snapshotAt + " 读取的内容";
       const kinds = selected();
-      plan.textContent = kinds.length > 1 ? "将保存为一个 ZIP，包含所选格式和素材。" : kinds[0] === "markdown" ? "将保存 Markdown 和图片包（ZIP）。" : kinds[0] === "attachments" ? "将保存已采集素材与清单（ZIP）。" : kinds[0] ? "将保存一个 " + kinds[0].toUpperCase() + " 文件。" : "请选择至少一种格式。";
+      plan.textContent = kinds.length > 1 ? "将保存为一个 ZIP，包含所选格式和素材。" : kinds[0] === "markdown" ? "将保存 Markdown 和已采集素材（ZIP）。" : kinds[0] === "attachments" ? "将保存已采集素材与清单（ZIP）。" : kinds[0] ? "将保存一个 " + kinds[0].toUpperCase() + " 文件。" : "请选择至少一种格式。";
       reload.hidden = ready || source?.unsupported || !waitStarted || Date.now() - waitStarted < 4e3;
       cancel.hidden = !task;
       cancel.disabled = Boolean(task?.cancelled);

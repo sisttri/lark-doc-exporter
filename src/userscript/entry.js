@@ -10,7 +10,7 @@ import { downloadFile } from './download.js';
 const prefix = 'feishu-local-export-';
 const formatKey = prefix + 'formats';
 const choices = [['markdown', 'Markdown'], ['html', 'HTML'], ['pdf', 'PDF'], ['attachments', '素材包']];
-const descriptions = ['便于编辑 · 含图片', '浏览器直接打开', '阅读与打印', '已采集图片与清单'];
+const descriptions = ['便于编辑 · 含素材', '浏览器直接打开', '阅读与打印', '图片、附件与清单'];
 
 async function defaultPdf(snapshot, options) {
   const { renderPdf } = await import('./pdf.js');
@@ -244,7 +244,7 @@ export function installPageExporter(view, {
     snapshotNote.textContent = '使用 ' + snapshotAt + ' 读取的内容';
     const kinds = selected();
     plan.textContent = kinds.length > 1 ? '将保存为一个 ZIP，包含所选格式和素材。'
-      : kinds[0] === 'markdown' ? '将保存 Markdown 和图片包（ZIP）。'
+      : kinds[0] === 'markdown' ? '将保存 Markdown 和已采集素材（ZIP）。'
       : kinds[0] === 'attachments' ? '将保存已采集素材与清单（ZIP）。'
       : kinds[0] ? '将保存一个 ' + kinds[0].toUpperCase() + ' 文件。' : '请选择至少一种格式。';
     reload.hidden = ready || source?.unsupported || !waitStarted || Date.now() - waitStarted < 4000;

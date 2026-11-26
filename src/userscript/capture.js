@@ -65,6 +65,24 @@ function semanticContent(html, cell = false) {
   return {fingerprint:JSON.stringify(tokens), text:texts.join(''), nested};
 }
 
+// Editor text-run boundaries can change without any source or formatting edit.
+// Keep component ops atomic; the converter renders one component per op.
+function modelContentSignature(block) {
+  if (!Array.isArray(block.ops)) return JSON.stringify(block);
+  const ops = [];
+  let previousAttributes = null;
+  for (const op of block.ops) {
+    const attributes = op.attributes || {};
+    const atomic = ['equation','mention','unresolvedInline','fixEnter'].some(name => Object.hasOwn(attributes,name));
+    const signature = atomic ? null : JSON.stringify(attributes);
+    const previous = ops.at(-1);
+    if (signature !== null && signature === previousAttributes && previous) previous.insert += op.insert;
+    else ops.push({insert:op.insert,attributes});
+    previousAttributes = signature;
+  }
+  return JSON.stringify({...block,ops});
+}
+
 function abortError() {
   return Object.assign(new Error("已取消"), { name: "AbortError" });
 }
@@ -987,7 +1005,7 @@ export async function capturePage({ stepRatio = 0.6, dwellMs, maxSteps = 400, on
       const before = new Map((boundInitial?.blocks || []).map(block => [block.id,block]));
       for (const block of semantic.blocks) {
         const previous = before.get(block.id);
-        if (previous?.ready && block.ready && JSON.stringify(previous) !== JSON.stringify(block)) contentChanged(block.id,'正文源块');
+        if (previous?.ready && block.ready && modelContentSignature(previous) !== modelContentSignature(block)) contentChanged(block.id,'正文源块');
       }
       if (boundInitial && JSON.stringify(boundInitial.roots) !== JSON.stringify(semantic.roots)) contentChanged(pageId,'正文结构');
       const sourceTypes = new Set(['text','heading1','heading2','heading3','heading4','heading5','heading6','bullet','ordered','todo','code','divider','isv']);

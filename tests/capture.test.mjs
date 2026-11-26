@@ -1514,6 +1514,20 @@ test('采集期间正文模型的就绪源码改变会保留变化提示',async 
   assert.ok(result.warnings.some(w=>w.code==='capture_content_changed'));
 });
 
+for(const change of ['segments','format','link']) test('正文模型'+({segments:'等价文本重分段不误报变化',format:'真实格式变化仍有提示',link:'真实链接变化仍有提示'})[change],async t=>{
+  const session=virtualDocument(t,{textIds:['2'],totalHeight:300});
+  const model=textModel('2','公开段落示例');
+  model.zoneState.content.ops=[{insert:'公开段落示例',attributes:change==='link'?{link:'https://example.test/first'}:{}}];
+  semanticModel(t,session,[model]);
+  const result=await capturePage({onProgress:progress=>{
+    session.onProgress(progress);
+    if(progress.stage==='audit') model.zoneState.content.ops=change==='link'
+      ?[{insert:'公开段落示例',attributes:{link:'https://example.test/second'}}]
+      :['公开','段落','示例'].map((insert,index)=>({insert,attributes:change==='format'&&index===1?{bold:true}:{}}));
+  }});
+  assert.equal(result.warnings.some(w=>w.code==='capture_content_changed'),change!=='segments');
+});
+
 function modelCallout(t,{missingSlot=false,detached=false}={}) {
   const session=virtualDocument(t,{textIds:[],totalHeight:400});
   const doc=globalThis.document,page=doc.querySelector('.page-block'),all=doc.querySelectorAll,one=doc.querySelector;
