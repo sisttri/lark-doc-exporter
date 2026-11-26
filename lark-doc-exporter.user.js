@@ -13344,7 +13344,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
           limited = true;
           break;
         }
-        const ready = snapshot.type !== "pending" && !(type === "synced_reference" && model.isAllDataReady !== true) && !(type === "fallback" && snapshot.type === "whiteboard");
+        const ready = type !== "fallback" && snapshot.type !== "pending" && !(type === "synced_reference" && model.isAllDataReady !== true);
         const block = { id, recordId: key(model.record?.id), parentId, type, children: children.map((child) => blockKey(child?.id)).filter(Boolean), ready };
         if (!ready) warn("missing_block", "正文模型块 " + id + " 尚未加载完整。");
         if (typeof model.zoneState?.allText === "string") block.text = text(model.zoneState.allText);
@@ -16432,29 +16432,8 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
       warnings2.hidden = !lines.length;
       if (!lines.length) return;
       const list = element("ul");
-      for (const line of lines.slice(0, 40)) list.append(element("li", "", line));
-      const reportOwner = snapshotOwner;
-      let reportFile;
-      const reportStatus = element("output", "report-status");
-      reportStatus.setAttribute("role", "status");
-      reportStatus.setAttribute("aria-live", "polite");
-      reportStatus.style.display = "block";
-      reportStatus.hidden = true;
-      const report = button("report", "下载完整提示", () => {
-        syncPage();
-        if (task || snapshotOwner !== reportOwner || !belongsToPage(reportOwner)) return;
-        try {
-          reportFile ||= { blob: new Blob([lines.join("\n") + "\n"], { type: "text/plain;charset=utf-8" }), filename: safeStem(snapshot.title) + "-保存提示.txt" };
-          downloadFile(view, reportFile.blob, reportFile.filename);
-          reportStatus.textContent = "提示文件已交给浏览器保存。";
-          report.textContent = "下载完整提示";
-        } catch (error) {
-          reportStatus.textContent = "提示文件下载失败：" + error.message;
-          report.textContent = "重试下载提示";
-        }
-        reportStatus.hidden = false;
-      });
-      warnings2.append(element("summary", "", "内容提示（" + lines.length + " 条）"), list, report, reportStatus);
+      for (const line of lines) list.append(element("li", "", line));
+      warnings2.append(element("summary", "", "内容提示（" + lines.length + " 条）"), list);
     }
     function showResult(file) {
       resultBox.replaceChildren();

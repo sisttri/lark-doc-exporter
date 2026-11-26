@@ -100,8 +100,8 @@ export function readPageModel({document=globalThis.document,pageView=pageWindow(
       ids.add(id);
       const snapshot=model.snapshot || {},children=childrenOf(model);
       if(children.length>MAX_BLOCKS) {limited=true;break;}
-      const ready=snapshot.type!=='pending' && !(type==='synced_reference' && model.isAllDataReady!==true) &&
-        !(type==='fallback' && snapshot.type==='whiteboard');
+      // Fallback models can become code or other real blocks when scrolled into view.
+      const ready=type!=='fallback' && snapshot.type!=='pending' && !(type==='synced_reference' && model.isAllDataReady!==true);
       const block={id,recordId:key(model.record?.id),parentId,type,children:children.map(child=>blockKey(child?.id)).filter(Boolean),ready};
       if(!ready) warn('missing_block','正文模型块 '+id+' 尚未加载完整。');
       if(typeof model.zoneState?.allText==='string') block.text=text(model.zoneState.allText);

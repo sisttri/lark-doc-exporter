@@ -1,7 +1,7 @@
 import { convertCapture, imageHtmlPath, attachmentHtmlPath } from '../feishu.js';
 import { readDocumentParts } from '../importer.js';
 import * as formats from '../formats.js';
-import { safeStem, warningLabel } from '../shared.js';
+import { warningLabel } from '../shared.js';
 import { capturePage, readDocumentSource } from './capture.js';
 import { css } from './entry-style.js';
 import { installTheme } from './theme.js';
@@ -336,25 +336,8 @@ export function installPageExporter(view, {
     const lines = warningLines(); warnings.hidden = !lines.length;
     if (!lines.length) return;
     const list = element('ul');
-    for (const line of lines.slice(0, 40)) list.append(element('li', '', line));
-    const reportOwner = snapshotOwner;
-    let reportFile;
-    const reportStatus = element('output', 'report-status');
-    reportStatus.setAttribute('role', 'status'); reportStatus.setAttribute('aria-live', 'polite');
-    reportStatus.style.display = 'block'; reportStatus.hidden = true;
-    const report = button('report', '下载完整提示', () => {
-      syncPage();
-      if (task || snapshotOwner !== reportOwner || !belongsToPage(reportOwner)) return;
-      try {
-        reportFile ||= {blob:new Blob([lines.join('\n') + '\n'], {type:'text/plain;charset=utf-8'}), filename:safeStem(snapshot.title) + '-保存提示.txt'};
-        downloadFile(view, reportFile.blob, reportFile.filename);
-        reportStatus.textContent = '提示文件已交给浏览器保存。'; report.textContent = '下载完整提示';
-      } catch (error) {
-        reportStatus.textContent = '提示文件下载失败：' + error.message; report.textContent = '重试下载提示';
-      }
-      reportStatus.hidden = false;
-    });
-    warnings.append(element('summary', '', '内容提示（' + lines.length + ' 条）'), list, report, reportStatus);
+    for (const line of lines) list.append(element('li', '', line));
+    warnings.append(element('summary', '', '内容提示（' + lines.length + ' 条）'), list);
   }
   function showResult(file) {
     resultBox.replaceChildren();

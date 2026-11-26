@@ -1637,6 +1637,23 @@ test('采集期间正文模型的就绪源码改变会保留变化提示',async 
   assert.ok(result.warnings.some(w=>w.code==='capture_content_changed'));
 });
 
+test('代码占位模型滚动加载成就绪代码时不误报正文编辑，完整代码仍保留',async t=>{
+  const session=virtualDocument(t);
+  const model={id:'2',type:'fallback',record:{id:'record-2'},snapshot:{type:'code'}};
+  semanticModel(t,session,[model]);
+  const result=await capturePage({onProgress:progress=>{
+    session.onProgress(progress);
+    if(progress.stage==='prepare') {
+      model.type='code';
+      model.zoneState={allText:'已加载代码',content:{ops:[{insert:'已加载代码'}]}};
+    }
+  }});
+  assert.ok(!result.warnings.some(w=>w.code==='capture_content_changed'));
+  assert.ok(!result.semantic.warnings.some(w=>w.code==='missing_block'));
+  assert.equal(result.code['2'].lines.length,30);
+  assert.equal(result.code['2'].lines.at(-1).text,'line 30');
+});
+
 for(const change of ['segments','format','link']) test('正文模型'+({segments:'等价文本重分段不误报变化',format:'真实格式变化仍有提示',link:'真实链接变化仍有提示'})[change],async t=>{
   const session=virtualDocument(t,{textIds:['2'],totalHeight:300});
   const model=textModel('2','公开段落示例');

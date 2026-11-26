@@ -66,6 +66,14 @@ test('page model uses synchronized children once and marks pending/incomplete no
   assert.ok(snapshot.warnings.some(w=>w.code==='missing_block'));
 });
 
+for(const sourceType of ['code','text','whiteboard',undefined]) test('fallback '+sourceType+' is an unloaded placeholder, not a ready content baseline',()=>{
+  const f=diagramFixture();
+  f.root.children=[{id:'deferred',type:'fallback',record:{id:'deferred-record'},snapshot:{type:sourceType}}];
+  const snapshot=readPageModel({document:f.document,pageView:f.pageView});
+  assert.equal(snapshot.blocks[0].ready,false);
+  assert.ok(snapshot.warnings.some(w=>w.code==='missing_block'&&w.label.includes('deferred')));
+});
+
 test('page model snapshots attachment identity even when its DOM is unmounted',()=>{
   const f=diagramFixture(),file={token:'original-token',name:'same-name.txt'};
   f.root.children=[{id:'unmounted-file',type:'file',record:{id:'file-record'},snapshot:{file}}];
