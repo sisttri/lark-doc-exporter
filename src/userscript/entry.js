@@ -313,23 +313,15 @@ export function installPageExporter(view, {
     syncPage();
     if (!file || task || !belongsToPage(snapshotOwner)) return;
     noticeId++; chooserOpen = false; cardOpen = true; history.open = true;
-    const documentPending = Boolean(result && pendingDownload === result);
     try {
       downloadFile(view, file.blob, file.filename);
-      if (file !== result && documentPending) {
-        status.textContent = '提示文件已交给浏览器保存。文档文件尚未交给浏览器，请重试下载。';
-      } else {
-        pendingDownload = null; failed = false;
-        const partial = warningLines().length > 0;
-        outcome = partial ? 'partial' : 'success'; unreadNotice = partial;
-        heading.textContent = partial ? '部分保存，请核对' : '文件已生成';
-        status.textContent = partial ? '部分保存。已交给浏览器保存，请查看内容提示。' : '已交给浏览器保存。';
-        if (file !== result) {
-          heading.textContent = '提示文件已生成'; status.textContent = '提示文件已交给浏览器保存。';
-        }
-      }
+      pendingDownload = null; failed = false;
+      const partial = warningLines().length > 0;
+      outcome = partial ? 'partial' : 'success'; unreadNotice = partial;
+      heading.textContent = partial ? '部分保存，请核对' : '文件已生成';
+      status.textContent = partial ? '部分保存。已交给浏览器保存，请查看内容提示。' : '已交给浏览器保存。';
     } catch (error) {
-      if (!documentPending || file === result) pendingDownload = file;
+      pendingDownload = file;
       failed = true; outcome = 'failed'; unreadNotice = true;
       heading.textContent = '保存失败';
       status.textContent = '保存失败：' + error.message + '已生成的文件仍可重试下载。';
@@ -345,13 +337,24 @@ export function installPageExporter(view, {
     if (!lines.length) return;
     const list = element('ul');
     for (const line of lines.slice(0, 40)) list.append(element('li', '', line));
-    warnings.append(element('summary', '', '内容提示（' + lines.length + ' 条）'), list,
-      button('report', '下载完整提示', () => {
-        syncPage();
-        if (snapshot && !task && belongsToPage(snapshotOwner)) {
-          retryDownload({blob:new Blob([warningLines().join('\n') + '\n'], {type:'text/plain;charset=utf-8'}), filename:safeStem(snapshot.title) + '-保存提示.txt'});
-        }
-      }));
+    const reportOwner = snapshotOwner;
+    let reportFile;
+    const reportStatus = element('output', 'report-status');
+    reportStatus.setAttribute('role', 'status'); reportStatus.setAttribute('aria-live', 'polite');
+    reportStatus.style.display = 'block'; reportStatus.hidden = true;
+    const report = button('report', '下载完整提示', () => {
+      syncPage();
+      if (task || snapshotOwner !== reportOwner || !belongsToPage(reportOwner)) return;
+      try {
+        reportFile ||= {blob:new Blob([lines.join('\n') + '\n'], {type:'text/plain;charset=utf-8'}), filename:safeStem(snapshot.title) + '-保存提示.txt'};
+        downloadFile(view, reportFile.blob, reportFile.filename);
+        reportStatus.textContent = '提示文件已交给浏览器保存。'; report.textContent = '下载完整提示';
+      } catch (error) {
+        reportStatus.textContent = '提示文件下载失败：' + error.message; report.textContent = '重试下载提示';
+      }
+      reportStatus.hidden = false;
+    });
+    warnings.append(element('summary', '', '内容提示（' + lines.length + ' 条）'), list, report, reportStatus);
   }
   function showResult(file) {
     resultBox.replaceChildren();
@@ -442,7 +445,9 @@ export function installPageExporter(view, {
       snapshot = working; snapshotOwner = op; snapshotAt = readAt; result = next;
       pdfNotes = (pdf?.notes || []).map(note => warningLabel('pdf_conversion_note') + ' · ' + note);
       showResult(next); showWarnings();
+      pendingDownload = next;
       downloadFile(view, next.blob, next.filename);
+      pendingDownload = null;
       const partial = warningLines().length > 0;
       outcome = partial ? 'partial' : 'success'; unreadNotice = partial; history.open = true;
       heading.textContent = partial ? '部分保存，请核对' : '文件已生成';
@@ -458,11 +463,10 @@ export function installPageExporter(view, {
       }
     } catch (error) {
       if (belongsToPage(op)) {
-        failed = error.name !== 'AbortError';
+        failed = Boolean(pendingDownload) || error.name !== 'AbortError';
         outcome = failed ? 'failed' : 'cancelled'; unreadNotice = failed; history.open = true;
         heading.textContent = failed ? '保存失败' : '已取消';
         status.textContent = failed ? '保存失败：' + error.message : '保存已取消。';
-        if (error.code === 'download_blocked') pendingDownload = result;
         if (result) status.textContent += pendingDownload ? '已生成的文件仍可重试下载。' : '上次保存的文件仍可下载。';
         showWarnings();
       }

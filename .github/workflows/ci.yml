@@ -28,6 +28,14 @@ jobs:
           cache: npm
       - name: Install locked dependencies
         run: npm ci
+      - name: Prepare real PDF verification tools
+        run: |
+          if ! command -v pdftotext >/dev/null || ! command -v pdftoppm >/dev/null; then
+            sudo apt-get update
+            sudo apt-get install --yes --no-install-recommends poppler-utils
+          fi
+          pdftotext -v
+          pdftoppm -v
       - name: Build and verify the distributed script
         run: |
           npm run build

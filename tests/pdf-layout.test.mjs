@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import pdfmake from 'pdfmake';
 import {zlibSync} from 'fflate';
-import {pdfDefinition, prepareImages} from '../src/pdf.js';
+import {pdfDefinition, prepareImages, generatePdfBuffer} from '../src/pdf.js';
 
 const n = (tag, children = [], props = {}) => ({tag, children, ...props});
 const documentOf = blocks => ({title:'Layout sample', blocks, assets:[], warnings:[]});
@@ -429,4 +429,51 @@ test('real PDF layout keeps adaptive merged tables and repeated headers inside t
   const text = pages.flatMap(page => page.items.filter(item => item.type === 'line').map(({item}) => item.inlines.map(run => run.text).join(''))).join('\n');
   assert.match(text, /Explanation 44/);
   assert.ok((await pdf.getBuffer()).subarray(0,5).equals(Buffer.from('%PDF-')));
+});
+
+test('PDF exports a table whose header exceeds one page without dropping any cells', async t => {
+  pdfmake.setUrlAccessPolicy(() => false);
+  pdfmake.setLocalAccessPolicy(path => /^Helvetica(?:-Bold|-Oblique|-BoldOblique)?$/.test(path));
+  pdfmake.addFonts({Noto:{normal:'Helvetica',bold:'Helvetica-Bold',italics:'Helvetica-Oblique',bolditalics:'Helvetica-BoldOblique'}});
+  const header=Array.from({length:100},(_,index)=>'HEADER_'+index).join('\n');
+  const snapshot=documentOf([n('table',[
+    n('thead',[n('tr',[n('th',[header])])]),
+    n('tbody',[n('tr',[n('td',['BODY_END'])])]),
+  ]),n('p',['AFTER_END'])]);
+  const original=structuredClone(snapshot);
+  const createPdf=pdfmake.createPdf.bind(pdfmake), attempts=[];
+  t.mock.method(pdfmake,'createPdf',doc=>{
+    const instance=createPdf(doc),attempt={};
+    attempts.push(attempt);
+    return {async getBuffer(){
+      attempt.stream=await instance.getStream();
+      return instance.getBuffer();
+    }};
+  });
+  const {bytes,notes}=await generatePdfBuffer(pdfmake,snapshot);
+  assert.equal(attempts.length,2);
+  const stream=attempts[1].stream;
+  const text=stream._pdfMakePages.flatMap(page=>page.items.filter(({type})=>type==='line')
+    .flatMap(({item})=>item.inlines.map(run=>run.text))).join('');
+  for (let index=0;index<100;index++) assert.ok(text.includes('HEADER_'+index),'HEADER_'+index);
+  for (const end of ['BODY_END','AFTER_END']) assert.ok(text.includes(end),end);
+  assert.ok(bytes.subarray(0,5).equals(Buffer.from('%PDF-')));
+  assert.equal(notes.length,1);
+  assert.match(notes[0],/表头.*取消.*重复表头/u);
+  assert.ok(text.includes(notes[0]));
+  assert.deepEqual(snapshot,original);
+});
+
+test('PDF recovery retries the specific header error at most once and preserves other errors', async () => {
+  const snapshot=documentOf([tableOf([['Cell']])]);
+  for (const [error,expectedAttempts] of [
+    [new Error('Table header cannot fit on a page within the available space.'),2],
+    [new Error('Invalid image'),1],
+    [Object.assign(new Error('PDF_LIMIT'),{code:'PDF_LIMIT'}),1],
+  ]) {
+    let attempts=0;
+    const engine={createPdf(){ attempts++;return {async getBuffer(){throw error;}}; }};
+    await assert.rejects(generatePdfBuffer(engine,snapshot),actual=>actual===error);
+    assert.equal(attempts,expectedAttempts);
+  }
 });

@@ -142,7 +142,7 @@ const pdfWorker = await build({
     resolveDir:root,
     sourcefile:'pdf-worker.js',
     contents:`
-import {pdfDefinition, prepareImages} from './src/pdf.js';
+import {generatePdfBuffer, prepareImages} from './src/pdf.js';
 import {safeStem} from './src/shared.js';
 import {readEmbeddedFont} from './src/userscript/pdf-fonts.js';
 
@@ -165,9 +165,8 @@ self.onmessage = async ({data}) => {
       NotoEmoji:data.fontArchive.find(font => font.name === 'Emoji.ttf').coverage,
       NotoSymbols:data.fontArchive.find(font => font.name === 'Symbols.ttf').coverage,
     };
-    const {doc, notes} = pdfDefinition(data.snapshot, prepared);
     postMessage({stage:'生成 PDF'});
-    const bytes = await pdfMake.createPdf(doc).getBuffer();
+    const {bytes, notes} = await generatePdfBuffer(pdfMake, data.snapshot, prepared);
     if (bytes.length > 64 * 1024 * 1024) throw Object.assign(new Error(), {code:'PDF_LIMIT'});
     postMessage({result:{filename:safeStem(data.snapshot.title)+'.pdf',blob:new Blob([bytes],{type:'application/pdf'}),notes}});
   } catch (error) {

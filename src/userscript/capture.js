@@ -419,7 +419,7 @@ export async function capturePage({ stepRatio = 0.6, dwellMs, maxSteps = 400, on
     const positions = new Map();
     const codeBlocks = new Map();
     const images = [];
-    const attachments = new Map(), pendingFiles = new Set();
+    const attachments = new Map(), attachmentStates = new Map(), pendingFiles = new Set();
     let attachmentBytes = 0;
     const attemptedFiles = new Set();
     const failedImages = new Set();
@@ -464,8 +464,10 @@ export async function capturePage({ stepRatio = 0.6, dwellMs, maxSteps = 400, on
         pendingFiles.delete(id); attemptedFiles.add(id);
         if (attachmentBytes >= 48*1024*1024 || attachments.size >= 128) continue;
         try {
-          const attachment = await readNativeAttachment(id,{document,pageView,checkStop,cache:nativeCache});
-          if (attachment && attachmentBytes + attachment.bytes.length <= 48*1024*1024) {
+          const result = await readNativeAttachment(id,{document,pageView,checkStop,cache:nativeCache});
+          if (result && attachmentBytes + result.bytes.length <= 48*1024*1024) {
+            const {token,...attachment} = result;
+            attachmentStates.set(id,{token,name:attachment.name});
             attachments.set(id,attachment); attachmentBytes += attachment.bytes.length;
           }
         } catch (error) { if (error.name === 'AbortError') throw error; }
@@ -1005,7 +1007,7 @@ export async function capturePage({ stepRatio = 0.6, dwellMs, maxSteps = 400, on
       const before = new Map((boundInitial?.blocks || []).map(block => [block.id,block]));
       for (const block of semantic.blocks) {
         const previous = before.get(block.id);
-        if (previous?.ready && block.ready && modelContentSignature(previous) !== modelContentSignature(block)) contentChanged(block.id,'正文源块');
+        if (previous?.ready && block.ready && modelContentSignature(previous) !== modelContentSignature(block)) contentChanged(block.id,block.type==='file' ? '附件' : '正文源块');
       }
       if (boundInitial && JSON.stringify(boundInitial.roots) !== JSON.stringify(semantic.roots)) contentChanged(pageId,'正文结构');
       const sourceTypes = new Set(['text','heading1','heading2','heading3','heading4','heading5','heading6','bullet','ordered','todo','code','divider','isv']);
@@ -1033,14 +1035,36 @@ export async function capturePage({ stepRatio = 0.6, dwellMs, maxSteps = 400, on
       if (missing.length) warnings.push({code:'missing_block',label:'正文模型中 '+missing.length+' 个块未能完整采集：'+missing.slice(0,20).join('、')+(missing.length>20?'…':'')});
       refreshRoots();
     }
-    // Retry a file only once at its known position. Conversion supplies an exact
-    // missing_attachment warning if native download remains unavailable.
+    // Revalidate saved file identities before retrying at each known position.
+    // Read before the next scroll can unmount this file's native context.
     for (const block of blocks.values()) {
-      if (block.type !== 'file' || attachments.has(block.id)) continue;
+      if (block.type !== 'file') continue;
+      const saved = attachments.get(block.id), previous = attachmentStates.get(block.id);
+      const current = semanticById.get(block.id)?.file;
+      if (saved && current && (previous.token !== current.token || previous.name !== current.name)) {
+        contentChanged(block.id,'附件');
+        attachments.delete(block.id); attachmentStates.delete(block.id);
+        attachmentBytes -= saved.bytes.length;
+      }
+      if (attachments.has(block.id)) continue;
       if (!document.querySelector('[data-block-id="'+block.id+'"]') && !await tryAt(block.id,(positions.get(block.id)||0)*scroller.scrollHeight-scroller.clientHeight/2)) continue;
       pendingFiles.add(block.id);
+      await collectImages({fresh:[]});
     }
     await collectImages({fresh:[]});
+    // A retry can await while another saved file changes. Audit once after all
+    // asynchronous reads, then discard stale files without starting more work.
+    if (attachments.size) {
+      const finalModel = readBoundModel();
+      const finalFiles = new Map((finalModel?.blocks || []).filter(block => block.type==='file' && block.ready).map(block => [block.id,block.file]));
+      for (const [id,saved] of attachments) {
+        const previous = attachmentStates.get(id), current = finalFiles.get(id);
+        if (current && previous.token===current.token && previous.name===current.name) continue;
+        contentChanged(id,'附件');
+        attachments.delete(id); attachmentStates.delete(id);
+        attachmentBytes -= saved.bytes.length;
+      }
+    }
 
     const childrenByParent = new Map();
     for (const block of blocks.values()) {

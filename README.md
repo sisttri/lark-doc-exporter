@@ -70,6 +70,8 @@ npm run build
 npm test
 ```
 
+真实 PDF 文本与像素回归使用 Poppler 的 `pdftotext`、`pdftoppm`。本地缺少工具时对应回归明确跳过；CI 会准备这两项验证工具。它们不进入插件或 PDF 缓存资源。
+
 输出为 `lark-doc-exporter.user.js` 和 `飞书文档导出工具-0.0.1.zip`。构建强制检查主脚本体积、固定 commit 资源地址、本地资源摘要及油猴编辑器默认静态规则，自有代码不压缩。也可用 `npm run lint` 单独检查最终脚本；ESLint 仅用于开发，不打入插件。第三方库的合法风格例外限定在各上游模块内，自有代码继续完整检查。
 
 更新 PDF 引擎或字体时，先运行 `npm run build:assets`。校验并提交 `release-assets/` 后，将 `pdf-resource-manifest.json` 指向该提交的固定 URL 和摘要，再构建主脚本。不要删除历史资源提交。资源说明见 [release-assets/README.md](release-assets/README.md)。

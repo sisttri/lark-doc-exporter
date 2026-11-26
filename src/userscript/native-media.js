@@ -161,7 +161,7 @@ export async function readNativeAttachment(id,{document=globalThis.document,page
       }
       if(jsonMime(mime) || jsonError)throw new Error('附件返回了JSON接口响应，可能没有下载权限，未保存为原件');
     }
-    const result={blockId:id,name,mime:mime||'application/octet-stream',bytes};
+    const result={blockId:id,token,name,mime:mime||'application/octet-stream',bytes};
     remember(cache,key,root,{...result,bytes:bytes.slice()},bytes.byteLength);
     return result;
   } finally {op.close();}

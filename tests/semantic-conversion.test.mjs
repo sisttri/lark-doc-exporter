@@ -1,7 +1,10 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {parse} from 'parse5';
+import {unzipSync} from 'fflate';
 import * as converter from '../src/feishu.js';
+import {readDocumentParts} from '../src/importer.js';
+import {renderFile} from '../src/formats.js';
 
 const block=(id,type,inner='')=>({id,type,html:'<div data-block-id="'+id+'" data-record-id="record-'+id+'" data-block-type="'+type+'">'+inner+'</div>'});
 const line=text=>'<div class="ace-line">'+text+'</div>';
@@ -54,6 +57,29 @@ test('identified plugin sources retain literal Mermaid and every timeline field 
   assert.ok(unknown.warnings.some(w=>w.code==='unsupported_block'&&w.label.includes('源码')));
 });
 
+test('table cells retain Mermaid and timeline source beside ordinary text through HTML and Markdown export',async()=>{
+  const mermaid='graph TD\n A[Public]-->B';
+  const inner=block('text','text',line('Cell introduction')).html+
+    block('mermaid','isv','<span>Mermaid preview</span>').html+
+    '<div>'+block('timeline','isv','<span>Timeline preview</span>').html+'</div>';
+  const result=converter.convertCapture(capture([block('table','table','<table><tr><td>'+inner+'</td></tr></table>')],
+    [{id:'mermaid',type:'isv',source:{language:'mermaid',text:mermaid}},
+      {id:'timeline',type:'isv',timeline:[{time:'Q1',title:'Public event',text:'Public details'}]}]));
+  const snapshot=await readDocumentParts({html:result.html});
+  assert.deepEqual(snapshot.warnings,[]);
+  assert.equal(attrs(result.html,'code')[0]?.class,'language-mermaid');
+  const html=await (await renderFile('html',snapshot)).blob.text();
+  const files=unzipSync(new Uint8Array(await (await renderFile('markdown',snapshot)).blob.arrayBuffer()));
+  const markdown=new TextDecoder().decode(files['公开语义样本.md']);
+  for(const output of [html,markdown]) {
+    assert.match(output,/<td>Cell introduction<pre><code class="language-mermaid">graph TD/u);
+    assert.match(output,/<ol><li><p>Q1 · Public event<\/p><p>Public details<\/p><\/li><\/ol><\/td>/u);
+    assert.doesNotMatch(output,/Mermaid preview|Timeline preview/u);
+  }
+  assert.ok(html.includes('graph TD\n A[Public]--&gt;B'));
+  assert.ok(markdown.includes('graph TD&#10; A&#91;Public&#93;--&gt;B'));
+});
+
 test('explicit model compensation recovers missing own text but mismatched document metadata is ignored',()=>{
   const missing={id:'missing',type:'text',html:'',semanticOnly:true};
   const semantic=[{id:'missing',type:'text',text:'补偿正文\n完整后行'}];
@@ -69,13 +95,40 @@ test('real attachment bytes yield isolated local download links and safe Unicode
   const name='公开报告.xlsx',attachment={blockId:'file',name,mime:'application/octet-stream',bytes:new Uint8Array([1,2,3])};
   assert.equal(converter.attachmentHtmlPath(attachment),'attachments/file-公开报告.xlsx');
   const result=converter.convertCapture(capture([block('file','file',line(name))],[],{attachments:[attachment]}));
-  assert.deepEqual(attrs(result.html,'a').map(a=>a.href),['attachments/file-公开报告.xlsx']);
+  assert.deepEqual(attrs(result.html,'a').map(a=>decodeURIComponent(a.href)),['attachments/file-公开报告.xlsx']);
   assert.ok('download' in attrs(result.html,'a')[0]);assert.deepEqual(result.warnings,[]);
   const unsafe=converter.attachmentHtmlPath({blockId:'../../bad',name:'../CON:秘密?.txt'});
   assert.ok(!/[<>:"\\|?*\u0000-\u001f]/u.test(unsafe));assert.equal(unsafe.split('/').length,2);
   assert.notEqual(unsafe,converter.attachmentHtmlPath({blockId:'bad',name:'../CON:秘密?.txt'}));
   const long=converter.attachmentHtmlPath({blockId:'x'.repeat(200),name:'文'.repeat(300)+'.xlsx'});
   assert.ok(long.endsWith('.xlsx'));assert.ok(long.split('/')[1].length<=160);
+});
+
+for(const [name,href] of [
+  ['report#v2.pdf','attachments/file-report%23v2.pdf'],
+  ['100%.txt','attachments/file-100%25.txt'],
+  ['budget%20draft.txt','attachments/file-budget%2520draft.txt'],
+  ['公开 报告.txt','attachments/file-%E5%85%AC%E5%BC%80%20%E6%8A%A5%E5%91%8A.txt'],
+]) test('attachment filename '+name+' resolves to original bytes in every export format',async()=>{
+  const bytes=Uint8Array.of(0,255,1,128,13,10);
+  const attachment={blockId:'file',name,bytes};
+  const path=converter.attachmentHtmlPath(attachment);
+  assert.equal(path,'attachments/file-'+name);
+  const result=converter.convertCapture(capture([block('file','file')],[],{attachments:[attachment]}));
+  const snapshot=await readDocumentParts({html:result.html,assets:[{path,bytes}]});
+  assert.deepEqual(snapshot.warnings,[]);
+  assert.equal(attrs(result.html,'a')[0].href,href);
+  assert.deepEqual(snapshot.assets,[{path,type:'application/octet-stream',bytes,role:'attachment'}]);
+  const html=await (await renderFile('html',snapshot)).blob.text();
+  const link=attrs(html,'a')[0];
+  assert.equal(link.download,'file-'+name);
+  assert.match(link.href,/^data:application\/octet-stream;base64,/u);
+  assert.deepEqual(new Uint8Array(Buffer.from(link.href.split(',')[1],'base64')),bytes);
+  for(const kind of ['markdown','attachments']) {
+    const files=unzipSync(new Uint8Array(await (await renderFile(kind,snapshot)).blob.arrayBuffer()));
+    assert.deepEqual(files[path],bytes);
+    if(kind==='markdown') assert.ok(new TextDecoder().decode(files['公开语义样本.md']).includes(']('+href+')'));
+  }
 });
 
 test('file blocks without actual byte arrays retain their missing-original warning',()=>{

@@ -1047,6 +1047,89 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
             }
             return [...missing];
           }
+          var needsActualText = /[\p{Extended_Pictographic}\p{Regional_Indicator}\p{Emoji_Presentation}\u20e3\u2610-\u2612\ufe0e\ufe0f\u200d]/u;
+          function textNeedsReplacement(value) {
+            if (typeof value === "string") return needsActualText.test(value);
+            if (Array.isArray(value)) return value.some(textNeedsReplacement);
+            return !!value && textNeedsReplacement(value.text);
+          }
+          function firstReplacementNode(value) {
+            if (Array.isArray(value)) {
+              for (const child of value) {
+                const found = firstReplacementNode(child);
+                if (found) return found;
+              }
+            } else if (value && typeof value === "object") {
+              if (textNeedsReplacement(value.text)) return value;
+              for (const children of [value.content, value.stack, value.columns, value.ul, value.ol, value.table?.body]) {
+                const found = firstReplacementNode(children);
+                if (found) return found;
+              }
+            }
+          }
+          function unavailable() {
+            return Object.assign(new Error("PDF 文本保真接口不可用，请重新安装脚本。"), { code: "PDF_RESOURCE_INVALID" });
+          }
+          function replacementHex(text) {
+            let hex3 = "feff";
+            for (let index = 0; index < text.length; index++) hex3 += text.charCodeAt(index).toString(16).padStart(4, "0");
+            return hex3;
+          }
+          function restoreMethod(object, key2, descriptor) {
+            if (descriptor) Object.defineProperty(object, key2, descriptor);
+            else delete object[key2];
+          }
+          function preparePdfActualText(doc) {
+            const node = firstReplacementNode(doc.content);
+            if (!node) {
+              return () => {
+              };
+            }
+            if (!doc.version || parseFloat(doc.version) < 1.5) doc.version = "1.5";
+            let document2, fragmentDescriptor;
+            Object.defineProperty(node, "_inlines", {
+              configurable: true,
+              set(inlines) {
+                Object.defineProperty(this, "_inlines", { value: inlines, writable: true, enumerable: true, configurable: true });
+                const measuredDocument = inlines.find((inline) => inline.font?.document)?.font.document;
+                if (!measuredDocument || typeof measuredDocument._fragment !== "function" || typeof measuredDocument.addContent !== "function") throw unavailable();
+                document2 = measuredDocument;
+                fragmentDescriptor = Object.getOwnPropertyDescriptor(document2, "_fragment");
+                const fragment = document2._fragment;
+                document2._fragment = function(text, ...args) {
+                  if (typeof text !== "string" || !needsActualText.test(text)) return fragment.call(this, text, ...args);
+                  const addContent = this.addContent;
+                  const contentDescriptor = Object.getOwnPropertyDescriptor(this, "addContent");
+                  let marked = false, replaced = false;
+                  this.addContent = function(content) {
+                    const result = addContent.call(this, content);
+                    if (content === "BT") {
+                      if (replaced) throw unavailable();
+                      addContent.call(this, "/Span << /ActualText <" + replacementHex(text) + "> >> BDC");
+                      marked = true;
+                      replaced = true;
+                    } else if (content === "ET" && marked) {
+                      marked = false;
+                      addContent.call(this, "EMC");
+                    }
+                    return result;
+                  };
+                  try {
+                    const result = fragment.call(this, text, ...args);
+                    if (!replaced || marked) throw unavailable();
+                    return result;
+                  } finally {
+                    restoreMethod(this, "addContent", contentDescriptor);
+                    if (marked) addContent.call(this, "EMC");
+                  }
+                };
+              }
+            });
+            return (completed) => {
+              if (document2) restoreMethod(document2, "_fragment", fragmentDescriptor);
+              else if (completed) throw unavailable();
+            };
+          }
           var INLINE = /* @__PURE__ */ new Set(["a", "span", "strong", "b", "em", "i", "s", "del", "strike", "small", "u", "code", "mark", "sub", "sup", "br"]);
           var SECTIONS = /* @__PURE__ */ new Set(["thead", "tbody", "tfoot"]);
           var MiB2 = 1024 * 1024;
@@ -1055,6 +1138,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
           var COLUMN_GAP = 16;
           var MIN_COLUMN_WIDTH = 24;
           var MAX_IMAGE_HEIGHT = 600;
+          var codeSegmenter;
           function limit() {
             throw Object.assign(new Error("PDF_LIMIT"), { code: "PDF_LIMIT" });
           }
@@ -1235,7 +1319,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
             const totalWeight = weights.reduce((sum, weight) => sum + weight, 0);
             return weights.map((weight) => MIN_COLUMN_WIDTH + remaining * weight / totalWeight);
           }
-          function pdfDefinition(snapshot, prepared = { images: {}, names: /* @__PURE__ */ new Map() }) {
+          function pdfDefinition(snapshot, prepared = { images: {}, names: /* @__PURE__ */ new Map() }, { repeatTableHeaders = true } = {}) {
             checkedSize(snapshot);
             let denseTables = 0, equations = 0;
             const missingGlyphs = /* @__PURE__ */ new Set();
@@ -1253,9 +1337,24 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
               return { text: runs.map((run) => run.font ? run : { text: boundLongTokens(run.text) }), ...add };
             }
             function codeLine(source, add = {}) {
-              const runs = source.match(/[\x00-\x7f]+|[^\x00-\x7f]+/gu) || [];
+              auditGlyphs(source);
+              const runs = [];
+              for (const run of splitEmojiRuns(source)) {
+                if (run.font) {
+                  runs.push(run);
+                  continue;
+                }
+                codeSegmenter ??= new Intl.Segmenter(void 0, { granularity: "grapheme" });
+                const segments = /^[\x00-\x7f]+$/u.test(run.text) ? [{ segment: run.text }] : codeSegmenter.segment(run.text);
+                for (const { segment } of segments) {
+                  const font = /^[\x00-\x7f]+$/u.test(segment) ? "Courier" : "Noto";
+                  const previous = runs.at(-1);
+                  if (previous?.font === font) previous.text += segment;
+                  else runs.push({ text: segment, font });
+                }
+              }
               return {
-                text: runs.map((text) => textLine(text, { font: /^[\x00-\x7f]+$/u.test(text) ? "Courier" : "Noto" })),
+                text: runs.map((run) => run.font === "Courier" || run.font === "Noto" ? { ...run, text: boundLongTokens(run.text) } : run),
                 preserveLeadingSpaces: true,
                 ...add
               };
@@ -1352,7 +1451,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
               const columnWidth2 = (availableWidth - (width - 1) * COLUMN_GAP) / width;
               if (columnWidth2 < MIN_COLUMN_WIDTH) return flatTable();
               const widths = columnWidths(grid, width, availableWidth, node.columnWidths);
-              if (headers >= rows.length) headers = 0;
+              if (headers >= rows.length || !repeatTableHeaders) headers = 0;
               const body = grid.map((row) => Array.from({ length: width }, (_, index) => {
                 const entry = row[index];
                 if (!entry) return { text: "" };
@@ -1442,6 +1541,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
             if (prepared.skipped) notes.push(prepared.skipped + " 幅图片已用文字说明");
             if (prepared.staticImages) notes.push(prepared.staticImages + " 幅图片以静态画面排版");
             if (denseTables) notes.push(denseTables + " 个宽表已按行展开");
+            if (!repeatTableHeaders) notes.push("表头超过单页可用高度，已取消表格跨页重复表头，保留全部内容。");
             if (equations) notes.push(equations + " 处公式已保留为 LaTeX 源码，未进行数学排版");
             if (missingGlyphs.size) {
               const codepoints = [...missingGlyphs].map((glyph) => [...glyph].map((character) => "U+" + character.codePointAt(0).toString(16).toUpperCase().padStart(4, "0")).join(" "));
@@ -1467,6 +1567,26 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
               content,
               footer: (page, pages) => ({ text: page + " / " + pages, alignment: "center", fontSize: 8, color: "#68756d", margin: [0, 10, 0, 0] })
             } };
+          }
+          async function generatePdfBuffer(pdfMake, snapshot, prepared) {
+            async function generate(repeatTableHeaders) {
+              const { doc, notes } = pdfDefinition(snapshot, prepared, { repeatTableHeaders });
+              const finishActualText = preparePdfActualText(doc);
+              let completed = false;
+              try {
+                const bytes = await pdfMake.createPdf(doc).getBuffer();
+                completed = true;
+                return { bytes, notes };
+              } finally {
+                finishActualText(completed);
+              }
+            }
+            try {
+              return await generate(true);
+            } catch (error) {
+              if (error?.message !== "Table header cannot fit on a page within the available space.") throw error;
+            }
+            return generate(false);
           }
           /* eslint-disable curly, no-redeclare, no-return-assign, no-sequences -- @preserve Upstream fflate conventions only. */
           var u82 = Uint8Array;
@@ -1906,9 +2026,8 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
                 NotoEmoji: data.fontArchive.find((font) => font.name === "Emoji.ttf").coverage,
                 NotoSymbols: data.fontArchive.find((font) => font.name === "Symbols.ttf").coverage
               };
-              const { doc, notes } = pdfDefinition(data.snapshot, prepared);
               postMessage({ stage: "生成 PDF" });
-              const bytes = await pdfMake.createPdf(doc).getBuffer();
+              const { bytes, notes } = await generatePdfBuffer(pdfMake, data.snapshot, prepared);
               if (bytes.length > 64 * 1024 * 1024) throw Object.assign(new Error(), { code: "PDF_LIMIT" });
               postMessage({ result: { filename: safeStem2(data.snapshot.title) + ".pdf", blob: new Blob([bytes], { type: "application/pdf" }), notes } });
             } catch (error) {
@@ -10300,7 +10419,8 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
     "heading4",
     "heading5",
     "heading6",
-    "file"
+    "file",
+    "isv"
   ]);
   var LANGUAGE_ALIASES = Object.freeze({
     "plain text": "text",
@@ -10928,7 +11048,8 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
       convertedContainers.add("file");
       const attachment = attachmentByBlock.get(info.id);
       if (attachment) {
-        return '<p><a href="' + escapeText2(attachmentHtmlPath(attachment)) + '" download="">' + escapeText2(typeof attachment.name === "string" && attachment.name ? attachment.name : "附件") + "</a></p>";
+        const href = attachmentHtmlPath(attachment).split("/").map(encodeURIComponent).join("/");
+        return '<p><a href="' + escapeText2(href) + '" download="">' + escapeText2(typeof attachment.name === "string" && attachment.name ? attachment.name : "附件") + "</a></p>";
       }
       function visibleText(node) {
         if (node.nodeName === "#text") return cleanText(node.value || "");
@@ -13262,6 +13383,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
         }
         if (type === "image") block.caption = caption(snapshot.image?.caption, id);
         if (type === "whiteboard") block.caption = caption(snapshot.caption, id);
+        if (type === "file") block.file = { token: text(snapshot.file?.token), name: text(snapshot.file?.name) };
         if (type === "ordered" && ["string", "number"].includes(typeof snapshot.seq)) block.seq = String(snapshot.seq);
         if (type === "todo" && typeof snapshot.done === "boolean") block.done = snapshot.done;
         if (type === "isv") {
@@ -13858,7 +13980,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
         }
         if (jsonMime(mime) || jsonError) throw new Error("附件返回了JSON接口响应，可能没有下载权限，未保存为原件");
       }
-      const result = { blockId: id, name, mime: mime || "application/octet-stream", bytes };
+      const result = { blockId: id, token, name, mime: mime || "application/octet-stream", bytes };
       remember(cache, key2, root, { ...result, bytes: bytes.slice() }, bytes.byteLength);
       return result;
     } finally {
@@ -13897,6 +14019,52 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
   function checkDimensions(width, height) {
     if (!Number.isSafeInteger(width) || !Number.isSafeInteger(height) || width < 1 || height < 1 || width > 8192 || height > 8192 || width * height > 16e6) throw new Error("图片位图尺寸超过限制或无效");
   }
+  function decodeBitmap(node, deadline, checkStop) {
+    return new Promise((resolve, reject) => {
+      let done = false, timer;
+      const check = () => {
+        checkStop();
+        if (Date.now() >= deadline) throw new Error("图片位图解码超时");
+      };
+      const settle = (error, bitmap) => {
+        if (done || error) {
+          try {
+            bitmap?.close();
+          } catch {
+          }
+        }
+        if (done) return;
+        done = true;
+        clearInterval(timer);
+        if (error) reject(error);
+        else resolve(bitmap);
+      };
+      const poll = () => {
+        if (!done) {
+          try {
+            check();
+          } catch (error) {
+            settle(error);
+          }
+        }
+      };
+      poll();
+      if (done) return;
+      timer = setInterval(poll, 50);
+      try {
+        Promise.resolve(globalThis.createImageBitmap(node)).then((bitmap) => {
+          try {
+            check();
+            settle(null, bitmap);
+          } catch (error) {
+            settle(error, bitmap);
+          }
+        }, (error) => settle(error));
+      } catch (error) {
+        settle(error);
+      }
+    });
+  }
   async function captureLoadedImage(id, {
     document: document2 = globalThis.document,
     wait: wait2,
@@ -13929,7 +14097,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
         checkDimensions(state.width, state.height);
         let bitmap;
         try {
-          if (typeof globalThis.createImageBitmap === "function") bitmap = await globalThis.createImageBitmap(state.node);
+          if (typeof globalThis.createImageBitmap === "function") bitmap = await decodeBitmap(state.node, started + 2500, checkStop);
           checkStop();
           if (!sameImageState(state, current())) continue;
           const width = bitmap?.width ?? state.width, height = bitmap?.height ?? state.height;
@@ -14828,7 +14996,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
       const positions = /* @__PURE__ */ new Map();
       const codeBlocks = /* @__PURE__ */ new Map();
       const images = [];
-      const attachments = /* @__PURE__ */ new Map(), pendingFiles = /* @__PURE__ */ new Set();
+      const attachments = /* @__PURE__ */ new Map(), attachmentStates = /* @__PURE__ */ new Map(), pendingFiles = /* @__PURE__ */ new Set();
       let attachmentBytes = 0;
       const attemptedFiles = /* @__PURE__ */ new Set();
       const failedImages = /* @__PURE__ */ new Set();
@@ -14841,8 +15009,10 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
           attemptedFiles.add(id);
           if (attachmentBytes >= 48 * 1024 * 1024 || attachments.size >= 128) continue;
           try {
-            const attachment = await readNativeAttachment(id, { document, pageView, checkStop, cache: nativeCache });
-            if (attachment && attachmentBytes + attachment.bytes.length <= 48 * 1024 * 1024) {
+            const result = await readNativeAttachment(id, { document, pageView, checkStop, cache: nativeCache });
+            if (result && attachmentBytes + result.bytes.length <= 48 * 1024 * 1024) {
+              const { token, ...attachment } = result;
+              attachmentStates.set(id, { token, name: attachment.name });
               attachments.set(id, attachment);
               attachmentBytes += attachment.bytes.length;
             }
@@ -15286,7 +15456,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
         const before = new Map((boundInitial?.blocks || []).map((block) => [block.id, block]));
         for (const block of semantic.blocks) {
           const previous = before.get(block.id);
-          if (previous?.ready && block.ready && modelContentSignature(previous) !== modelContentSignature(block)) contentChanged(block.id, "正文源块");
+          if (previous?.ready && block.ready && modelContentSignature(previous) !== modelContentSignature(block)) contentChanged(block.id, block.type === "file" ? "附件" : "正文源块");
         }
         if (boundInitial && JSON.stringify(boundInitial.roots) !== JSON.stringify(semantic.roots)) contentChanged(pageId, "正文结构");
         const sourceTypes = /* @__PURE__ */ new Set(["text", "heading1", "heading2", "heading3", "heading4", "heading5", "heading6", "bullet", "ordered", "todo", "code", "divider", "isv"]);
@@ -15315,11 +15485,33 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
         refreshRoots();
       }
       for (const block of blocks.values()) {
-        if (block.type !== "file" || attachments.has(block.id)) continue;
+        if (block.type !== "file") continue;
+        const saved = attachments.get(block.id), previous = attachmentStates.get(block.id);
+        const current = semanticById.get(block.id)?.file;
+        if (saved && current && (previous.token !== current.token || previous.name !== current.name)) {
+          contentChanged(block.id, "附件");
+          attachments.delete(block.id);
+          attachmentStates.delete(block.id);
+          attachmentBytes -= saved.bytes.length;
+        }
+        if (attachments.has(block.id)) continue;
         if (!document.querySelector('[data-block-id="' + block.id + '"]') && !await tryAt(block.id, (positions.get(block.id) || 0) * scroller.scrollHeight - scroller.clientHeight / 2)) continue;
         pendingFiles.add(block.id);
+        await collectImages({ fresh: [] });
       }
       await collectImages({ fresh: [] });
+      if (attachments.size) {
+        const finalModel = readBoundModel();
+        const finalFiles = new Map((finalModel?.blocks || []).filter((block) => block.type === "file" && block.ready).map((block) => [block.id, block.file]));
+        for (const [id, saved] of attachments) {
+          const previous = attachmentStates.get(id), current = finalFiles.get(id);
+          if (current && previous.token === current.token && previous.name === current.name) continue;
+          contentChanged(id, "附件");
+          attachments.delete(id);
+          attachmentStates.delete(id);
+          attachmentBytes -= saved.bytes.length;
+        }
+      }
       const childrenByParent = /* @__PURE__ */ new Map();
       for (const block of blocks.values()) {
         if (!childrenByParent.has(block.parentId)) childrenByParent.set(block.parentId, []);
@@ -16212,26 +16404,17 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
       chooserOpen = false;
       cardOpen = true;
       history.open = true;
-      const documentPending = Boolean(result && pendingDownload === result);
       try {
         downloadFile(view, file.blob, file.filename);
-        if (file !== result && documentPending) {
-          status.textContent = "提示文件已交给浏览器保存。文档文件尚未交给浏览器，请重试下载。";
-        } else {
-          pendingDownload = null;
-          failed = false;
-          const partial = warningLines().length > 0;
-          outcome = partial ? "partial" : "success";
-          unreadNotice = partial;
-          heading.textContent = partial ? "部分保存，请核对" : "文件已生成";
-          status.textContent = partial ? "部分保存。已交给浏览器保存，请查看内容提示。" : "已交给浏览器保存。";
-          if (file !== result) {
-            heading.textContent = "提示文件已生成";
-            status.textContent = "提示文件已交给浏览器保存。";
-          }
-        }
+        pendingDownload = null;
+        failed = false;
+        const partial = warningLines().length > 0;
+        outcome = partial ? "partial" : "success";
+        unreadNotice = partial;
+        heading.textContent = partial ? "部分保存，请核对" : "文件已生成";
+        status.textContent = partial ? "部分保存。已交给浏览器保存，请查看内容提示。" : "已交给浏览器保存。";
       } catch (error) {
-        if (!documentPending || file === result) pendingDownload = file;
+        pendingDownload = file;
         failed = true;
         outcome = "failed";
         unreadNotice = true;
@@ -16250,16 +16433,28 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
       if (!lines.length) return;
       const list = element("ul");
       for (const line of lines.slice(0, 40)) list.append(element("li", "", line));
-      warnings2.append(
-        element("summary", "", "内容提示（" + lines.length + " 条）"),
-        list,
-        button("report", "下载完整提示", () => {
-          syncPage();
-          if (snapshot && !task && belongsToPage(snapshotOwner)) {
-            retryDownload({ blob: new Blob([warningLines().join("\n") + "\n"], { type: "text/plain;charset=utf-8" }), filename: safeStem(snapshot.title) + "-保存提示.txt" });
-          }
-        })
-      );
+      const reportOwner = snapshotOwner;
+      let reportFile;
+      const reportStatus = element("output", "report-status");
+      reportStatus.setAttribute("role", "status");
+      reportStatus.setAttribute("aria-live", "polite");
+      reportStatus.style.display = "block";
+      reportStatus.hidden = true;
+      const report = button("report", "下载完整提示", () => {
+        syncPage();
+        if (task || snapshotOwner !== reportOwner || !belongsToPage(reportOwner)) return;
+        try {
+          reportFile ||= { blob: new Blob([lines.join("\n") + "\n"], { type: "text/plain;charset=utf-8" }), filename: safeStem(snapshot.title) + "-保存提示.txt" };
+          downloadFile(view, reportFile.blob, reportFile.filename);
+          reportStatus.textContent = "提示文件已交给浏览器保存。";
+          report.textContent = "下载完整提示";
+        } catch (error) {
+          reportStatus.textContent = "提示文件下载失败：" + error.message;
+          report.textContent = "重试下载提示";
+        }
+        reportStatus.hidden = false;
+      });
+      warnings2.append(element("summary", "", "内容提示（" + lines.length + " 条）"), list, report, reportStatus);
     }
     function showResult(file) {
       resultBox.replaceChildren();
@@ -16380,7 +16575,9 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
         pdfNotes = (pdf?.notes || []).map((note) => warningLabel("pdf_conversion_note") + " · " + note);
         showResult(next);
         showWarnings();
+        pendingDownload = next;
         downloadFile(view, next.blob, next.filename);
+        pendingDownload = null;
         const partial = warningLines().length > 0;
         outcome = partial ? "partial" : "success";
         unreadNotice = partial;
@@ -16403,13 +16600,12 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
         }
       } catch (error) {
         if (belongsToPage(op)) {
-          failed = error.name !== "AbortError";
+          failed = Boolean(pendingDownload) || error.name !== "AbortError";
           outcome = failed ? "failed" : "cancelled";
           unreadNotice = failed;
           history.open = true;
           heading.textContent = failed ? "保存失败" : "已取消";
           status.textContent = failed ? "保存失败：" + error.message : "保存已取消。";
-          if (error.code === "download_blocked") pendingDownload = result;
           if (result) status.textContent += pendingDownload ? "已生成的文件仍可重试下载。" : "上次保存的文件仍可下载。";
           showWarnings();
         }

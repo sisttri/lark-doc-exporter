@@ -66,6 +66,17 @@ test('page model uses synchronized children once and marks pending/incomplete no
   assert.ok(snapshot.warnings.some(w=>w.code==='missing_block'));
 });
 
+test('page model snapshots attachment identity even when its DOM is unmounted',()=>{
+  const f=diagramFixture(),file={token:'original-token',name:'same-name.txt'};
+  f.root.children=[{id:'unmounted-file',type:'file',record:{id:'file-record'},snapshot:{file}}];
+  const before=readPageModel({document:f.document,pageView:f.pageView});
+  file.token='replacement-token';
+  const after=readPageModel({document:f.document,pageView:f.pageView});
+  assert.deepEqual(before.blocks[0].file,{token:'original-token',name:'same-name.txt'});
+  assert.deepEqual(after.blocks[0].file,{token:'replacement-token',name:'same-name.txt'});
+  assert.deepEqual(after.warnings,[]);
+});
+
 test('page model bounds oversized inventories without claiming a complete tree',()=>{
   const f=diagramFixture();f.root.children=Array.from({length:20_001},(_,id)=>({id:String(id),type:'text'}));
   const snapshot=readPageModel({document:f.document,pageView:f.pageView});

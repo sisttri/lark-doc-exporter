@@ -53,6 +53,18 @@ test('PDF code retains Courier spacing and Unicode fonts without splitting emoji
   assert.ok(runs.some(run=>run.font==='NotoEmoji' && run.text==='✅'));
 });
 
+test('PDF code keeps keycaps and combining characters together when choosing fonts',()=>{
+  const code='const keys = "0️⃣ 1️⃣ #️⃣ *️⃣"; // a\u0301 中文';
+  const {doc}=pdfDefinition(snapshot([n('pre',[code])]));
+  const runs=textRuns(doc.content.find(item=>item.preserveLeadingSpaces),doc.defaultStyle);
+  assert.equal(runs.map(run=>run.text).join(''),code);
+  for (const keycap of ['0️⃣','1️⃣','#️⃣','*️⃣']) {
+    assert.ok(runs.some(run=>run.font==='NotoEmoji' && run.text.includes(keycap)),keycap);
+  }
+  assert.ok(runs.some(run=>run.font==='Noto' && run.text.includes('a\u0301')));
+  assert.ok(runs.some(run=>run.font==='Courier' && run.text.includes('const keys = "')));
+});
+
 test('PDF reports unsupported fallback glyph codepoints once while preserving their source text',()=>{
   const input={...snapshot([n('p',['✨ 🫩 🫩'])]),warnings:[{code:'missing_image',label:'附件 🫩'}]};
   const original=structuredClone(input);

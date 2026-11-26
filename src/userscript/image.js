@@ -32,6 +32,31 @@ function checkDimensions(width, height) {
     || width > 8192 || height > 8192 || width*height > 16_000_000) throw new Error('图片位图尺寸超过限制或无效');
 }
 
+function decodeBitmap(node, deadline, checkStop) {
+  return new Promise((resolve,reject) => {
+    let done=false, timer;
+    const check=() => {
+      checkStop();
+      if (Date.now()>=deadline) throw new Error('图片位图解码超时');
+    };
+    const settle=(error,bitmap) => {
+      if (done || error) { try { bitmap?.close(); } catch {} }
+      if (done) return;
+      done=true;clearInterval(timer);
+      if (error) reject(error); else resolve(bitmap);
+    };
+    const poll=() => { if (!done) { try { check(); } catch(error) { settle(error); } } };
+    poll();
+    if (done) return;
+    timer=setInterval(poll,50);
+    try {
+      Promise.resolve(globalThis.createImageBitmap(node)).then(bitmap => {
+        try { check();settle(null,bitmap); } catch(error) { settle(error,bitmap); }
+      },error => settle(error));
+    } catch(error) { settle(error); }
+  });
+}
+
 export async function captureLoadedImage(id, {document = globalThis.document, wait, checkStop=()=>{}, saved,
   pageView,cache,fetch,timeoutMs} = {}) {
   const current = () => readImageState(document.querySelector('[data-block-id="' + id + '"]'));
@@ -52,7 +77,7 @@ export async function captureLoadedImage(id, {document = globalThis.document, wa
       try {
         // ImageBitmap copies media pixels, including a selected high-density resource.
         // naturalWidth/naturalHeight alone can be density-corrected CSS dimensions.
-        if (typeof globalThis.createImageBitmap === 'function') bitmap = await globalThis.createImageBitmap(state.node);
+        if (typeof globalThis.createImageBitmap === 'function') bitmap = await decodeBitmap(state.node,started+2500,checkStop);
         checkStop();
         if (!sameImageState(state,current())) continue;
         const width = bitmap?.width ?? state.width, height = bitmap?.height ?? state.height;

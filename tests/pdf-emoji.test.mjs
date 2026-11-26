@@ -84,17 +84,20 @@ test('PDF fallback fonts render real emoji, checkbox and styled mixed text witho
     n('p',['正文 '+emoji+' 结束']),
     n('p',[n('strong',[n('em',['粗斜体 '+emoji])])]),
     n('table',[n('tr',[n('td',['表格 '+emoji])])]),
-    n('pre',['const answer = "代码✨☐";']),
+    n('pre',['const answer = "代码✨☐ 0️⃣ 1️⃣ #️⃣ *️⃣";']),
   ]});
   const instance=pdfmake.createPdf(doc);
   const stream=await instance.getStream();
   const inlines=stream._pdfMakePages.flatMap(page=>page.items.filter(item=>item.type==='line').flatMap(({item})=>item.inlines));
   const actualText=inlines.map(run=>run.text).join('');
   assert.ok(actualText.includes('正文 '+emoji+' 结束'));
-  assert.ok(actualText.includes('const answer = "代码✨☐";'));
+  assert.ok(actualText.includes('const answer = "代码✨☐ 0️⃣ 1️⃣ #️⃣ *️⃣";'));
   const fallback=inlines.filter(run=>['NotoEmoji-Regular','NotoSansSymbols2-Regular'].includes(run.font.name));
   assert.ok(fallback.some(run=>run.font.name==='NotoEmoji-Regular'));
   assert.ok(fallback.some(run=>run.font.name==='NotoSansSymbols2-Regular'));
   for(const run of fallback)assert.ok(run.font.font.layout(run.text).glyphs.every(glyph=>glyph.id!==0),run.text);
+  for(const run of inlines) {
+    if (typeof run.font.font?.layout==='function') assert.ok(run.font.font.layout(run.text).glyphs.every(glyph=>glyph.id!==0),run.text);
+  }
   const bytes=await instance.getBuffer();assert.equal(Buffer.from(bytes).subarray(0,5).toString(),'%PDF-');
 });

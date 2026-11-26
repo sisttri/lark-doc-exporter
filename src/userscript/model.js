@@ -136,6 +136,7 @@ export function readPageModel({document=globalThis.document,pageView=pageWindow(
       }
       if(type==='image') block.caption=caption(snapshot.image?.caption,id);
       if(type==='whiteboard') block.caption=caption(snapshot.caption,id);
+      if(type==='file') block.file={token:text(snapshot.file?.token),name:text(snapshot.file?.name)};
       if(type==='ordered' && ['string','number'].includes(typeof snapshot.seq)) block.seq=String(snapshot.seq);
       if(type==='todo' && typeof snapshot.done==='boolean') block.done=snapshot.done;
       if(type==='isv') {

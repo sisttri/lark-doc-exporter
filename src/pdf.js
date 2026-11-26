@@ -2,6 +2,7 @@
 import {warningLabel} from './shared.js';
 import {normalizeCellStyle, normalizeColumnWidths} from './table-style.js';
 import {missingEmojiGlyphs, splitEmojiRuns} from './pdf-emoji.js';
+import {preparePdfActualText} from './pdf-actual-text.js';
 const INLINE = new Set(['a', 'span', 'strong', 'b', 'em', 'i', 's', 'del', 'strike', 'small', 'u', 'code', 'mark', 'sub', 'sup', 'br']);
 const SECTIONS = new Set(['thead', 'tbody', 'tfoot']);
 const MiB = 1024 * 1024;
@@ -10,6 +11,7 @@ const PAGE_WIDTH = 595.28 - PAGE_MARGINS[0] - PAGE_MARGINS[2];
 const COLUMN_GAP = 16; // lightHorizontalLines uses 8 pt on each side of an interior column boundary.
 const MIN_COLUMN_WIDTH = 24;
 const MAX_IMAGE_HEIGHT = 600;
+let codeSegmenter;
 function limit() { throw Object.assign(new Error('PDF_LIMIT'), {code: 'PDF_LIMIT'}); }
 export function plain(node) {
   if (typeof node === 'string') return node;
@@ -178,7 +180,7 @@ function columnWidths(grid, count, availableWidth, hints) {
   const totalWeight = weights.reduce((sum, weight) => sum + weight, 0);
   return weights.map(weight => MIN_COLUMN_WIDTH + remaining * weight / totalWeight);
 }
-export function pdfDefinition(snapshot, prepared = {images:{}, names:new Map()}) {
+export function pdfDefinition(snapshot, prepared = {images:{}, names:new Map()}, {repeatTableHeaders = true} = {}) {
   checkedSize(snapshot);
   let denseTables = 0, equations = 0;
   const missingGlyphs = new Set();
@@ -194,8 +196,20 @@ export function pdfDefinition(snapshot, prepared = {images:{}, names:new Map()})
     return {text:runs.map(run => run.font ? run : {text:boundLongTokens(run.text)}), ...add};
   }
   function codeLine(source, add = {}) {
-    const runs = source.match(/[\x00-\x7f]+|[^\x00-\x7f]+/gu) || [];
-    return {text:runs.map(text => textLine(text,{font:/^[\x00-\x7f]+$/u.test(text) ? 'Courier' : 'Noto'})),
+    auditGlyphs(source);
+    const runs = [];
+    for (const run of splitEmojiRuns(source)) {
+      if (run.font) { runs.push(run); continue; }
+      codeSegmenter ??= new Intl.Segmenter(undefined, {granularity:'grapheme'});
+      const segments = /^[\x00-\x7f]+$/u.test(run.text) ? [{segment:run.text}] : codeSegmenter.segment(run.text);
+      for (const {segment} of segments) {
+        const font = /^[\x00-\x7f]+$/u.test(segment) ? 'Courier' : 'Noto';
+        const previous = runs.at(-1);
+        if (previous?.font === font) previous.text += segment;
+        else runs.push({text:segment,font});
+      }
+    }
+    return {text:runs.map(run => run.font === 'Courier' || run.font === 'Noto' ? {...run,text:boundLongTokens(run.text)} : run),
       preserveLeadingSpaces:true, ...add};
   }
   function sequence(nodes, availableWidth, fontSize, cellColor) {
@@ -276,7 +290,7 @@ export function pdfDefinition(snapshot, prepared = {images:{}, names:new Map()})
     const columnWidth = (availableWidth - (width - 1) * COLUMN_GAP) / width;
     if (columnWidth < MIN_COLUMN_WIDTH) return flatTable();
     const widths = columnWidths(grid, width, availableWidth, node.columnWidths);
-    if (headers >= rows.length) headers = 0;
+    if (headers >= rows.length || !repeatTableHeaders) headers = 0;
     const body = grid.map(row => Array.from({length:width}, (_, index) => {
       const entry = row[index];
       if (!entry) return {text:''};
@@ -352,6 +366,7 @@ export function pdfDefinition(snapshot, prepared = {images:{}, names:new Map()})
   if (prepared.skipped) notes.push(prepared.skipped + ' 幅图片已用文字说明');
   if (prepared.staticImages) notes.push(prepared.staticImages + ' 幅图片以静态画面排版');
   if (denseTables) notes.push(denseTables + ' 个宽表已按行展开');
+  if (!repeatTableHeaders) notes.push('表头超过单页可用高度，已取消表格跨页重复表头，保留全部内容。');
   if (equations) notes.push(equations + ' 处公式已保留为 LaTeX 源码，未进行数学排版');
   if (missingGlyphs.size) {
     const codepoints = [...missingGlyphs].map(glyph => [...glyph].map(character =>
@@ -370,4 +385,23 @@ export function pdfDefinition(snapshot, prepared = {images:{}, names:new Map()})
   return {denseTables, notes, doc:{info:{title:snapshot.title, creator:'本地导出工具'}, pageSize:'A4',pageMargins:PAGE_MARGINS,
     defaultStyle:{font:'Noto',fontSize:10,lineHeight:1.2,color:'#202c25'}, images:prepared.images, content,
     footer:(page, pages) => ({text:page+' / '+pages,alignment:'center',fontSize:8,color:'#68756d',margin:[0,10,0,0]})}};
+}
+
+export async function generatePdfBuffer(pdfMake, snapshot, prepared) {
+  async function generate(repeatTableHeaders) {
+    const {doc, notes} = pdfDefinition(snapshot, prepared, {repeatTableHeaders});
+    const finishActualText = preparePdfActualText(doc);
+    let completed = false;
+    try {
+      const bytes = await pdfMake.createPdf(doc).getBuffer();
+      completed = true;
+      return {bytes, notes};
+    } finally { finishActualText(completed); }
+  }
+  try { return await generate(true); }
+  catch (error) {
+    if (error?.message !== 'Table header cannot fit on a page within the available space.') throw error;
+  }
+  // pdfmake mutates its definition during layout; rebuild once from the snapshot.
+  return generate(false);
 }

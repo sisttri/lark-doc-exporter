@@ -48,7 +48,7 @@ function harness({captureHook, captureImages = [], captureData = {}, onYield, pd
   let timerId = 0;
   const head = new Element('head'), body = new Element('body'), root = new Element('div');
   root.setAttribute('data-block-type', 'page'); body.append(root);
-  const downloads = [], blobs = new Map(), events = new Map(), stored = new Map();
+  const downloads = [], downloadAttempts = [], blobs = new Map(), events = new Map(), stored = new Map();
   if (initialFormats !== undefined) stored.set('feishu-local-export-formats', JSON.stringify(initialFormats));
   if (initialPosition !== undefined) stored.set('feishu-local-export-position', String(initialPosition));
   const location = new URL('https://example.feishu.cn/wiki/A');
@@ -61,6 +61,8 @@ function harness({captureHook, captureImages = [], captureData = {}, onYield, pd
       createElement(tag) {
         const element = new Element(tag);
         if (tag === 'a') element.click = () => {
+          downloadAttempts.push({name:element.download, blob:blobs.get(element.href)});
+          if (downloadBlock instanceof Error) throw downloadBlock;
           if (downloadBlock === 'undelivered') return;
           const event = {target:element,defaultPrevented:false,preventDefault() { this.defaultPrevented = true; }};
           element.listeners.get('click')?.(event);
@@ -125,7 +127,7 @@ function harness({captureHook, captureImages = [], captureData = {}, onYield, pd
     }
   };
   return {
-    get, select, navigate, downloads, stored, menu:() => menu,
+    get, select, navigate, downloads, downloadAttempts, stored, menu:() => menu,
     blockDownloads(mode) { downloadBlock = mode; },
     open:() => { if (!get('popover').hidden) get('close').click(); get('launcher').click(); },
     reuse:async () => { get('supplement').click(); await get('button').click(); },
@@ -270,22 +272,121 @@ test('重新下载和下载提示被取消时显示失败，不丢失原文件�
   ui.get('report').click();
   assert.match(ui.downloads.at(-1).name, /保存提示\.txt$/u);
   assert.match(await ui.downloads.at(-1).blob.text(), /第 3 行缺失/u);
-  assert.equal(ui.get('status').textContent, '提示文件已交给浏览器保存。');
+  assert.match(ui.get('status').textContent, /部分保存.*已交给浏览器/u);
+  assert.match(ui.get('report-status').textContent, /提示文件已交给浏览器保存/u);
 });
 
 test('提示报告成功不会覆盖正文尚未交付的失败状态，重试仍复用正文文件', async () => {
   const ui = harness({warnings:[{code:'code_lines_missing',label:'第 3 行缺失'}]});
   ui.blockDownloads('preventDefault'); ui.open(); ui.select('html'); await ui.get('button').click();
   assert.equal(ui.downloads.length, 0);
+  const documentStatus = ui.get('status').textContent;
   ui.blockDownloads(''); ui.get('report').click();
   assert.match(ui.downloads[0].name, /保存提示\.txt$/u);
-  assert.match(ui.get('status').textContent, /提示文件已交给浏览器.*文档文件尚未交给浏览器/u);
+  assert.equal(ui.get('status').textContent, documentStatus);
+  assert.match(ui.get('report-status').textContent, /提示文件已交给浏览器保存/u);
   assert.equal(ui.get('retry').hidden, false);
   ui.get('retry').click();
   assert.equal(ui.downloads[1].name, '文档A.html');
   assert.match(ui.get('status').textContent, /部分保存.*已交给浏览器/u);
   assert.equal(ui.get('retry').hidden, true);
   assert.equal(ui.captures(), 1);
+});
+
+for (const error of [new Error('下载异常'), new DOMException('下载被拒绝', 'SecurityError'), new DOMException('下载中止', 'AbortError')]) {
+  test('正文下载抛出 ' + error.name + ' 后重试同一个 Blob，不重复采集或生成 PDF', async () => {
+    const ui = harness();
+    ui.blockDownloads(error); ui.open(); ui.select('pdf'); await ui.get('button').click();
+    const original = ui.downloadAttempts[0].blob;
+    assert.equal(ui.downloads.length, 0);
+    assert.match(ui.get('status').textContent, /保存失败/u);
+    assert.equal(ui.get('retry').hidden, false);
+    ui.blockDownloads(''); await ui.get('retry').click();
+    assert.equal(ui.downloads[0].blob, original);
+    assert.equal(ui.captures(), 1);
+    assert.equal(ui.pdfs(), 1);
+  });
+}
+
+for (const reportFailsFirst of [false, true]) {
+  test('PDF 生成失败后，报告' + (reportFailsFirst ? '先失败再成功' : '成功') + '仍保留正文失败与重试', async () => {
+    let pdfFails = true;
+    const ui = harness({warnings:[{code:'code_lines_missing',label:'第 3 行缺失'}],
+      pdfHook:() => { if (pdfFails) throw new Error('PDF 生成失败，请重试。'); }});
+    ui.open(); ui.select('pdf'); await ui.get('button').click();
+    const documentStatus = ui.get('status').textContent;
+    const heading = ui.get('job-heading').textContent;
+    assert.match(documentStatus, /保存失败.*PDF/u);
+    assert.equal(ui.get('retry').hidden, false);
+    let reportBlob;
+    if (reportFailsFirst) {
+      ui.blockDownloads(new Error('提示下载异常')); ui.get('report').click();
+      reportBlob = ui.downloadAttempts.at(-1).blob;
+      assert.equal(ui.get('status').textContent, documentStatus);
+      assert.equal(ui.get('job-heading').textContent, heading);
+      assert.equal(ui.get('retry').hidden, false);
+      assert.match(ui.get('report-status').textContent, /提示文件.*失败/u);
+    }
+    ui.blockDownloads(''); ui.get('report').click();
+    assert.match(ui.downloads[0].name, /保存提示\.txt$/u);
+    if (reportBlob) assert.equal(ui.downloads[0].blob, reportBlob);
+    assert.equal(ui.get('status').textContent, documentStatus);
+    assert.equal(ui.get('job-heading').textContent, heading);
+    assert.equal(ui.get('retry').hidden, false);
+    assert.match(ui.get('report-status').textContent, /提示文件已交给浏览器保存/u);
+    pdfFails = false; await ui.get('retry').click();
+    assert.equal(ui.downloads[1].name, '文档A.pdf');
+    assert.equal(ui.pdfs(), 2);
+    assert.equal(ui.get('retry').hidden, true);
+  });
+}
+
+test('提示报告失败只重试报告，不将已交付的正文变成失败', async () => {
+  const ui = harness({warnings:[{code:'code_lines_missing',label:'第 3 行缺失'}]});
+  ui.open(); ui.select('html'); await ui.get('button').click();
+  const original = ui.downloads[0].blob, documentStatus = ui.get('status').textContent;
+  ui.blockDownloads(new Error('提示下载异常')); ui.get('report').click();
+  const reportBlob = ui.downloadAttempts.at(-1).blob;
+  assert.equal(ui.get('status').textContent, documentStatus);
+  assert.equal(ui.get('retry').hidden, true);
+  assert.match(ui.get('report').textContent, /重试/u);
+  ui.blockDownloads(''); ui.get('report').click();
+  assert.equal(ui.downloads[1].blob, reportBlob);
+  assert.equal(ui.get('status').textContent, documentStatus);
+  ui.get('redownload').click();
+  assert.equal(ui.downloads[2].blob, original);
+  assert.equal(ui.captures(), 1);
+});
+
+test('下载失败后切篇清除待下载正文和提示报告', async () => {
+  const ui = harness({warnings:[{code:'code_lines_missing',label:'第 3 行缺失'}]});
+  ui.blockDownloads(new Error('下载异常')); ui.open(); ui.select('html'); await ui.get('button').click();
+  const oldReport = ui.get('report'); oldReport.click();
+  ui.navigate('B');
+  assert.equal(ui.get('retry').hidden, true);
+  assert.equal(ui.get('redownload').hidden, true);
+  ui.blockDownloads(''); ui.open(); await ui.get('button').click();
+  oldReport.click();
+  assert.deepEqual(ui.downloads.map(file => file.name), ['文档B.html']);
+  ui.get('report').click();
+  assert.equal(ui.downloads[1].name, '文档B-保存提示.txt');
+});
+
+test('取消新保存后下载报告保留取消状态，旧文件仍可下载', async () => {
+  let release, pause = false;
+  const ui = harness({warnings:[{code:'code_lines_missing',label:'第 3 行缺失'}],
+    captureHook:() => pause ? new Promise(resolve => { release = resolve; }) : undefined});
+  ui.open(); ui.select('html'); await ui.get('button').click();
+  const original = ui.downloads[0].blob;
+  pause = true; ui.open(); const pending = ui.get('button').click();
+  ui.get('cancel').click(); release(); await pending;
+  const documentStatus = ui.get('status').textContent;
+  assert.match(documentStatus, /已取消/u);
+  ui.get('report').click();
+  assert.equal(ui.get('status').textContent, documentStatus);
+  assert.equal(ui.get('retry').hidden, true);
+  ui.get('redownload').click();
+  assert.equal(ui.downloads.at(-1).blob, original);
 });
 
 test('入口保留 PNG、JPEG、GIF、WebP 原编码和原字节到 HTML 与 Markdown 素材', async () => {

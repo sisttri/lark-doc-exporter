@@ -452,7 +452,7 @@ test(delayedPixels ? '表格白板透明画布随后绘制时更新就绪状态�
 
 // A virtual editor retains a spacer at each unrendered end of the code zone.
 // Reading immediately after scrolling still sees the previous rendered rows.
-function virtualDocument(t, { unavailable = [], totalHeight = 2200, textIds, lineText, auditShift = 0, delayedLines } = {}) {
+function virtualDocument(t, { unavailable = [], totalHeight = 2200, textIds, lineText, auditShift = 0, delayedLines, nativeTimers = false } = {}) {
   let now = 0;
   let y = 75;
   let renderedAt = y;
@@ -474,7 +474,9 @@ function virtualDocument(t, { unavailable = [], totalHeight = 2200, textIds, lin
     },
     getBoundingClientRect: () => ({ top: 0, bottom: viewport, height: viewport }),
   };
+  const schedule = globalThis.setTimeout;
   t.mock.method(globalThis, 'setTimeout', (fn, ms) => {
+    if (nativeTimers && ms >= 10_000) return schedule(fn,ms);
     now += ms;
     if (now - movedAt >= 220) renderedAt = y;
     queueMicrotask(fn);
@@ -549,6 +551,127 @@ function virtualDocument(t, { unavailable = [], totalHeight = 2200, textIds, lin
     },
   };
 }
+
+function virtualAttachments(t, {virtual = false, count = virtual ? 2 : 1} = {}) {
+  const session = virtualDocument(t,{textIds:[],totalHeight:virtual ? 1000 : 300,nativeTimers:true});
+  const doc = globalThis.document, page = doc.querySelector('.page-block');
+  const one = doc.querySelector, all = doc.querySelectorAll;
+  const models = Array.from({length:count},(_,index) => ({id:'file'+index,type:'file',record:{id:'record-file'+index},
+    snapshot:{file:{token:'old-token-'+index,name:'file'+index+'.txt',mime_type:'text/plain'}}}));
+  const nodes = models.map((model,index) => ({
+    parentElement:{closest:() => page},
+    get textContent() {return model.snapshot.file.name;},
+    get outerHTML() {return '<div data-block-id="'+model.id+'" data-block-type="file" data-record-id="'+model.record.id+'"><span>'+model.snapshot.file.name+'</span></div>';},
+    getAttribute:name => ({'data-block-id':model.id,'data-block-type':'file','data-record-id':model.record.id})[name] ?? null,
+    querySelectorAll:() => [],querySelector:() => null,
+    getBoundingClientRect:() => ({top:index*700-session.scroller.scrollTop,bottom:index*700+40-session.scroller.scrollTop,height:40}),
+    scrollIntoView() {session.scroller.scrollTop=index*700;},
+  }));
+  const mounted = node => !virtual || Math.abs(nodes.indexOf(node)*700-session.scroller.scrollTop) < 200;
+  page.contains = node => nodes.includes(node) && mounted(node);
+  doc.querySelector = selector => nodes.find(node => mounted(node) && selector==='[data-block-id="'+node.getAttribute('data-block-id')+'"]') || one(selector);
+  doc.querySelectorAll = selector => selector==='[data-block-id]' ? [page,...nodes.filter(mounted)] : all(selector);
+  semanticModel(t,session,models);
+  globalThis.unsafeWindow.globalConfig={drive_api:['drive.feishu.cn']};
+  const fetches = [];
+  let permitted = true;
+  t.mock.method(globalThis,'fetch',async url => {
+    fetches.push({url,permitted});
+    return new Response(new TextEncoder().encode(url.includes('/old-token-') ? 'old bytes' : 'new bytes'),
+      {status:permitted ? 200 : 403,headers:{'content-type':'text/plain'}});
+  });
+  return {...session,models,fetches,setPermitted:value => {permitted=value;}};
+}
+
+test('附件补采定位后立即读取，不因下一个视口卸载前一个就绪文件',async t => {
+  const session = virtualAttachments(t,{virtual:true});
+  session.setPermitted(false);
+  const result = await capturePage({onProgress(progress) {
+    session.onProgress(progress);
+    if (progress.stage==='audit') session.setPermitted(true);
+  }});
+  assert.deepEqual(result.attachments.map(file => file.blockId),['file0','file1']);
+  assert.equal(session.fetches.filter(request => request.permitted).length,2);
+  assert.deepEqual(convertCapture(result).warnings,[]);
+  assert.equal(session.scroller.scrollTop,session.originalTop);
+});
+
+for (const change of ['token','name','failed']) test('已采集附件'+({token:'同名换token后更新原件',name:'仅更名后更新名称且复用字节缓存',failed:'换token后读取失败会丢弃旧原件'})[change],async t => {
+  const session = virtualAttachments(t);
+  const result = await capturePage({onProgress(progress) {
+    session.onProgress(progress);
+    if (progress.stage!=='audit') return;
+    if (change==='name') session.models[0].snapshot.file.name='renamed.txt';
+    else session.models[0].snapshot.file.token='new-token';
+    if (change==='failed') session.setPermitted(false);
+  }});
+  assert.ok(result.warnings.some(warning => warning.code==='capture_content_changed'));
+  if (change==='failed') {
+    assert.deepEqual(result.attachments,[]);
+    assert.ok(convertCapture(result).warnings.some(warning => warning.code==='missing_attachment'));
+  } else {
+    assert.equal(result.attachments.length,1);
+    assert.equal(result.attachments[0].name,change==='name' ? 'renamed.txt' : 'file0.txt');
+    assert.equal(new TextDecoder().decode(result.attachments[0].bytes),change==='name' ? 'old bytes' : 'new bytes');
+    assert.equal(session.fetches.length,change==='name' ? 1 : 2);
+  }
+  assert.equal(session.scroller.scrollTop,session.originalTop);
+});
+
+test('稳定附件在最终复核保持成功缓存，不重复下载或添加变化提示',async t => {
+  const session = virtualAttachments(t);
+  const result = await capturePage({onProgress:session.onProgress});
+  assert.equal(result.attachments.length,1);
+  assert.equal(session.fetches.length,1);
+  assert.deepEqual(result.warnings,[]);
+});
+
+test('附件离开视口后同名换token仍由模型复核定位并替换',async t => {
+  const session = virtualAttachments(t,{virtual:true});
+  const result = await capturePage({onProgress(progress) {
+    session.onProgress(progress);
+    if (progress.stage==='audit') session.models[0].snapshot.file.token='new-token';
+  }});
+  assert.equal(result.attachments.length,2);
+  assert.equal(new TextDecoder().decode(result.attachments.find(file => file.blockId==='file0').bytes),'new bytes');
+  assert.equal(new TextDecoder().decode(result.attachments.find(file => file.blockId==='file1').bytes),'old bytes');
+  assert.equal(session.fetches.length,3);
+  assert.ok(result.warnings.some(warning => warning.code==='capture_content_changed'));
+  assert.ok(!convertCapture(result).warnings.some(warning => warning.code==='missing_attachment'));
+});
+
+for (const change of ['token','name','unavailable']) test('附件最终补采等待期间'+({token:'其他成功附件换token',name:'其他成功附件更名',unavailable:'页面模型失效'})[change]+'会剔除未确认的旧件且不无限重试',async t => {
+  const session = virtualAttachments(t,{count:2});
+  let firstAttempts = 0, fetches = 0;
+  t.mock.method(globalThis,'fetch',async url => {
+    fetches++;
+    if (url.includes('/old-token-0')) {
+      if (++firstAttempts===1) return new Response('forbidden',{status:403});
+      if (change==='unavailable') delete globalThis.unsafeWindow.PageMain;
+      else session.models[1].snapshot.file[change]=change==='token' ? 'new-token-1' : 'renamed.txt';
+    }
+    return new Response('old bytes',{headers:{'content-type':'text/plain'}});
+  });
+  const result = await capturePage({onProgress:session.onProgress});
+  assert.deepEqual(result.attachments.map(file => file.blockId),change==='unavailable' ? [] : ['file0']);
+  assert.equal(firstAttempts,2);
+  assert.equal(fetches,3);
+  assert.ok(result.warnings.some(warning => warning.code==='capture_content_changed' && warning.label.includes('file1')));
+  assert.ok(convertCapture(result).warnings.some(warning => warning.code==='missing_attachment' && warning.label.includes('file1')));
+  assert.ok(result.attachments.every(file => !Object.hasOwn(file,'token')));
+  assert.equal(session.scroller.scrollTop,session.originalTop);
+});
+
+test('附件达到数量预算后替换已有原件仍释放原槽位',async t => {
+  const session = virtualAttachments(t,{count:128});
+  const result = await capturePage({onProgress(progress) {
+    session.onProgress(progress);
+    if (progress.stage==='audit') session.models[0].snapshot.file.token='new-token';
+  }});
+  assert.equal(result.attachments.length,128);
+  assert.equal(new TextDecoder().decode(result.attachments.find(file => file.blockId==='file0').bytes),'new bytes');
+  assert.equal(session.fetches.length,129);
+});
 
 test('view 附件容器只作为一个根块采集，子 file 不重复且不误报未支持或正文变化', async t => {
   const session = virtualDocument(t,{textIds:[],totalHeight:400});

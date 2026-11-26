@@ -19,7 +19,7 @@ const HEADING_TYPE = /^heading([1-6])$/u;
 const ESCAPES = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
 const CELL_BLOCK_TYPES = new Set([
   'text', 'bullet', 'ordered', 'code', 'image', 'whiteboard', 'diagram', 'quote', 'callout', 'quote_container', 'synced_reference', 'view', 'grid', 'grid_column', 'divider', 'todo',
-  'heading1', 'heading2', 'heading3', 'heading4', 'heading5', 'heading6', 'file',
+  'heading1', 'heading2', 'heading3', 'heading4', 'heading5', 'heading6', 'file', 'isv',
 ]);
 const LANGUAGE_ALIASES = Object.freeze({
   'plain text': 'text',
@@ -747,7 +747,8 @@ export function convertCapture(capture) {
     convertedContainers.add('file');
     const attachment=attachmentByBlock.get(info.id);
     if(attachment) {
-      return '<p><a href="'+escapeText(attachmentHtmlPath(attachment))+'" download="">'+
+      const href=attachmentHtmlPath(attachment).split('/').map(encodeURIComponent).join('/');
+      return '<p><a href="'+escapeText(href)+'" download="">'+
         escapeText(typeof attachment.name==='string' && attachment.name?attachment.name:'附件')+'</a></p>';
     }
     function visibleText(node) {

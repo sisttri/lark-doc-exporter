@@ -96,7 +96,7 @@ test('原生callback失败/超时可重试；用户取消立即传播且迟到ca
 
 test('附件通过文档模型的token和文件名下载原字节，wiki地址不冒充宿主文档token',async()=>{
   const f=mediaFixture('file'),value=await readNativeAttachment('asset',f.options);
-  assert.deepEqual(value,{blockId:'asset',name:'示例.txt',mime:'text/plain',bytes:new TextEncoder().encode('附件原文')});
+  assert.deepEqual(value,{blockId:'asset',token:'file-token',name:'示例.txt',mime:'text/plain',bytes:new TextEncoder().encode('附件原文')});
   const url=new URL(f.fetches[0].url);
   assert.equal(url.origin,'https://drive.feishu.cn');assert.equal(url.pathname,'/space/api/box/stream/download/all/file-token');
   assert.equal(url.searchParams.get('mount_node_token'),'asset-record');assert.equal(url.searchParams.get('mount_point'),'docx_file');
