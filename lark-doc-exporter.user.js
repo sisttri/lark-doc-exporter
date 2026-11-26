@@ -9980,6 +9980,8 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
     "quote_container",
     "synced_reference",
     "view",
+    "grid",
+    "grid_column",
     "divider",
     "todo",
     "heading1",
@@ -10198,6 +10200,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
     const infos = [];
     const walk = (node) => {
       for (const child of childElements(node)) {
+        if (isHiddenOrControl(child)) continue;
         const type = nodeAttr(child, "data-block-type");
         if (type === "table") {
           addWarning("unsupported_block", "表格内嵌套表格未转换");
@@ -10295,38 +10298,87 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
     for (const image of Array.isArray(capture.images) ? capture.images : []) {
       if (image && image.blockId != null) imageByBlock.set(String(image.blockId), image);
     }
-    function renderSequence(infos2) {
+    function listNumber(info) {
+      function findOrder(node) {
+        for (const child of childElements(node)) {
+          if (isHiddenOrControl(child)) continue;
+          const type = nodeAttr(child, "data-block-type");
+          if (type && type !== "page") continue;
+          if (hasClass(child, "order")) return child;
+          const found = findOrder(child);
+          if (found) return found;
+        }
+        return null;
+      }
+      const order = findOrder(info.element);
+      const number = order ? Number.parseInt(textContent(order).trim(), 10) : Number.NaN;
+      return Number.isSafeInteger(number) ? number : null;
+    }
+    function renderSequence(infos2, cell = false) {
       const fragments = [];
       for (let index = 0; index < infos2.length; ) {
         const { type } = infos2[index];
         if (type === "bullet" || type === "ordered") {
           const items = [];
-          while (index < infos2.length && infos2[index].type === type) items.push(infos2[index++]);
-          const list = renderList(type, items);
+          let next = listNumber(infos2[index]) ?? 1;
+          while (index < infos2.length && infos2[index].type === type) {
+            const number = type === "ordered" ? listNumber(infos2[index]) : null;
+            if (items.length && number !== null && number !== next) break;
+            items.push(infos2[index++]);
+            next++;
+          }
+          const list = renderList(type, items, cell);
           if (list) fragments.push(list);
           continue;
         }
-        const html2 = renderBlock(infos2[index]);
+        const html2 = cell ? renderCellBlock(infos2[index]) : renderBlock(infos2[index]);
         if (html2) fragments.push(html2);
         index++;
       }
       return fragments;
     }
-    function renderList(kind, infos2) {
-      const tag = kind === "ordered" ? "ol" : "ul";
-      let start = null;
-      if (kind === "ordered") {
-        const order = findFirstElement(infos2[0].element, (element) => hasClass(element, "order"));
-        const number = order ? Number.parseInt(textContent(order).trim(), 10) : Number.NaN;
-        if (Number.isInteger(number) && number !== 1) start = number;
+    function contentParts(element) {
+      const parts = [];
+      function visit(node) {
+        for (const child of childElements(node)) {
+          if (isHiddenOrControl(child)) continue;
+          const type = nodeAttr(child, "data-block-type");
+          if (type && type !== "page") parts.push({ id: nodeAttr(child, "data-block-id"), type, element: child });
+          else if (hasClass(child, "ace-line")) parts.push({ line: child });
+          else visit(child);
+        }
       }
+      visit(element);
+      return parts;
+    }
+    function renderContent(parts, cell = false, inline = false) {
+      const fragments = [];
+      for (let index = 0; index < parts.length; ) {
+        if (parts[index].line) {
+          const lines = [];
+          while (index < parts.length && parts[index].line) {
+            const html2 = renderInline(parts[index++].line.childNodes, false);
+            if (hasVisibleContent(html2)) lines.push(html2);
+          }
+          if (lines.length) fragments.push(inline ? lines.join("<br>") : "<p>" + lines.join("<br>") + "</p>");
+        } else {
+          const children = [];
+          while (index < parts.length && !parts[index].line) children.push(parts[index++]);
+          fragments.push(...renderSequence(children, cell));
+        }
+      }
+      return joinCellFragments(fragments);
+    }
+    function renderList(kind, infos2, cell = false) {
+      const tag = kind === "ordered" ? "ol" : "ul";
+      const start = kind === "ordered" ? listNumber(infos2[0]) : null;
       const items = [];
       for (const info of infos2) {
-        const content = renderLines(info.element);
-        if (hasVisibleContent(content)) items.push("<li>" + content + "</li>");
+        const content = renderContent(contentParts(info.element), cell, true);
+        if (content) items.push("<li>" + content + "</li>");
       }
       if (!items.length) return null;
-      return "<" + tag + (start === null ? "" : ' start="' + start + '"') + ">" + items.join("") + "</" + tag + ">";
+      return "<" + tag + (start === null || start === 1 ? "" : ' start="' + start + '"') + ">" + items.join("") + "</" + tag + ">";
     }
     function renderHeading(info, level) {
       const order = findFirstElement(info.element, (element) => hasClass(element, "heading-order"));
@@ -10342,33 +10394,19 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
       const content = renderLines(info.element);
       return content ? "<p>" + content + "</p>" : null;
     }
-    function renderQuote(info) {
-      const content = renderLines(info.element);
-      return content ? "<blockquote><p>" + content + "</p></blockquote>" : null;
+    function renderQuote(info, cell = false) {
+      const content = renderContent(contentParts(info.element), cell);
+      return content ? "<blockquote>" + content + "</blockquote>" : null;
     }
-    function renderContainer(info) {
+    function renderContainer(info, cell = false) {
       convertedContainers.add(info.type);
-      const children = [];
-      function visit(node) {
-        for (const child of childElements(node)) {
-          if (isHiddenOrControl(child)) continue;
-          const type = nodeAttr(child, "data-block-type");
-          if (type && type !== "page") {
-            children.push({ id: nodeAttr(child, "data-block-id"), type, element: child });
-          } else visit(child);
-        }
-      }
-      visit(info.element);
-      if (!children.length) {
-        if (info.type === "quote_container") {
-          const content2 = renderQuote(info);
-          if (content2) return content2;
-        }
-        const label = info.type === "quote_container" ? "引用容器 " : info.type === "view" ? "视图容器 " : "同步块 ";
+      const previousWarnings = warnings2.length;
+      const content = renderContent(contentParts(info.element), cell);
+      if (!content && warnings2.length === previousWarnings) {
+        const label = info.type === "quote_container" ? "引用容器 " : info.type === "view" ? "视图容器 " : ["grid", "grid_column"].includes(info.type) ? "分栏容器 " : "同步块 ";
         addWarning("unsupported_block", label + info.id + " 尚未读取到已渲染正文");
         return null;
       }
-      const content = renderSequence(children).join("");
       return info.type === "quote_container" ? "<blockquote>" + content + "</blockquote>" : content || null;
     }
     function renderTodo(info) {
@@ -10478,7 +10516,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
           return renderLines(info.element) || null;
         case "bullet":
         case "ordered":
-          return renderList(info.type, [info]);
+          return renderList(info.type, [info], true);
         case "code":
           return renderCode(info);
         case "image":
@@ -10489,11 +10527,17 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
           return renderFile2(info);
         case "quote":
         case "callout":
-          return renderQuote(info);
+          return renderQuote(info, true);
         case "quote_container":
         case "synced_reference":
         case "view":
           return renderContainer(info);
+        case "grid":
+        case "grid_column":
+          return renderContainer(info, true);
+        case "table":
+          addWarning("unsupported_block", "表格内嵌套表格未转换");
+          return null;
         case "divider":
           return "<hr>";
         case "todo":
@@ -10510,21 +10554,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
       }
     }
     function renderCellSequence(infos2) {
-      const fragments = [];
-      for (let index = 0; index < infos2.length; ) {
-        const { type } = infos2[index];
-        if (type === "bullet" || type === "ordered") {
-          const items = [];
-          while (index < infos2.length && infos2[index].type === type) items.push(infos2[index++]);
-          const list = renderList(type, items);
-          if (list) fragments.push(list);
-          continue;
-        }
-        const html2 = renderCellBlock(infos2[index]);
-        if (html2) fragments.push(html2);
-        index++;
-      }
-      return fragments;
+      return renderSequence(infos2, true);
     }
     function renderTableCell(cell) {
       const tag = cell.tagName === "th" ? "th" : "td";
@@ -10609,6 +10639,8 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
         case "quote_container":
         case "synced_reference":
         case "view":
+        case "grid":
+        case "grid_column":
           return renderContainer(info);
         case "divider":
           return "<hr>";
@@ -12990,7 +13022,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
   var ZERO_WIDTH3 = /[\u200b\u200c\u200d\u2060\ufeff]/gu;
   var CODE_ROW = ".code-line-wrapper[data-line-num]";
   var wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-  var CONTAINER_TYPES = /* @__PURE__ */ new Set(["page", "table", "code", "grid", "quote", "quote_container", "synced_reference", "view"]);
+  var CONTAINER_TYPES = /* @__PURE__ */ new Set(["page", "table", "code", "grid", "grid_column", "callout", "quote", "quote_container", "synced_reference", "view"]);
   function semanticContent(html, cell = false) {
     const fragment = parseFragment(html);
     const tokens = [], texts = [];
@@ -13367,12 +13399,13 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
           descendants.push([block.id, block.parentId, block.type, content]);
         }
         return { signature: JSON.stringify(descendants), ready };
-      }, rebuildList = function(block, visiting = /* @__PURE__ */ new Set()) {
-        if (rebuiltLists.has(block.id) || visiting.has(block.id)) return;
+      }, rebuildChildren = function(block, visiting = /* @__PURE__ */ new Set()) {
+        if (rebuiltChildren.has(block.id) || visiting.has(block.id)) return;
         const children = childrenByParent.get(block.id) || [];
-        if (!children.length || !["bullet", "ordered"].includes(block.type)) return;
+        const slotClass = childSlots[block.type];
+        if (!children.length || !slotClass) return;
         visiting.add(block.id);
-        for (const child of children) rebuildList(child, visiting);
+        for (const child of children) rebuildChildren(child, visiting);
         visiting.delete(block.id);
         const fragment = parseFragment(block.html);
         function findChildren(node) {
@@ -13380,7 +13413,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
           const id = attrs.find((attr3) => attr3.name === "data-block-id")?.value;
           if (id && id !== block.id) return null;
           const classes = attrs.find((attr3) => attr3.name === "class")?.value.split(/\s+/u) || [];
-          if (classes.includes("list-children")) return node;
+          if (classes.includes(slotClass)) return node;
           for (const child of node.childNodes || []) {
             const found = findChildren(child);
             if (found) return found;
@@ -13389,7 +13422,17 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
         }
         const slot = findChildren(fragment);
         if (!slot) {
-          warnings2.push({ code: "missing_block", label: "列表块 " + block.id + " 未找到嵌套内容容器，未能确认子项位置。" });
+          warnings2.push({ code: "missing_block", label: childLabel(block) + block.id + " 未找到嵌套内容容器，未能确认子项位置。" });
+          return;
+        }
+        function hasOwnLine(node) {
+          const attrs = node.attrs || [];
+          if (attrs.some((attr3) => attr3.name === "data-block-id" && attr3.value !== block.id)) return false;
+          if (attrs.some((attr3) => attr3.name === "class" && attr3.value.split(/\s+/u).includes("ace-line"))) return true;
+          return (node.childNodes || []).some(hasOwnLine);
+        }
+        if (hasOwnLine(slot)) {
+          warnings2.push({ code: "missing_block", label: childLabel(block) + block.id + " 的自身文字与子项容器混合，未能确认子项位置。" });
           return;
         }
         const ordered = [...children];
@@ -13398,7 +13441,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
         slot.childNodes = parseFragment(ordered.map((child) => child.html).join("")).childNodes;
         for (const child of slot.childNodes) child.parentNode = slot;
         block.html = serialize(fragment);
-        rebuiltLists.add(block.id);
+        rebuiltChildren.add(block.id);
       };
       scroller.scrollTop = 0;
       await wait(150);
@@ -13878,8 +13921,17 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
         if (!childrenByParent.has(block.parentId)) childrenByParent.set(block.parentId, []);
         childrenByParent.get(block.parentId).push(block);
       }
-      const rebuiltLists = /* @__PURE__ */ new Set();
-      for (const block of blocks.values()) rebuildList(block);
+      const childSlots = {
+        bullet: "list-children",
+        ordered: "list-children",
+        callout: "callout-block-children",
+        grid: "grid-block",
+        grid_column: "grid-column-block"
+      };
+      const childLabels = { callout: "提示块 ", grid: "分栏块 ", grid_column: "分栏列 " };
+      const childLabel = (block) => childLabels[block.type] || "列表块 ";
+      const rebuiltChildren = /* @__PURE__ */ new Set();
+      for (const block of blocks.values()) rebuildChildren(block);
       const embeddedPages = new Map([...blocks].filter(([, block]) => block.type === "page" && block.id !== pageId));
       for (const page of embeddedPages.values()) {
         let findPageChildren = function(node) {
@@ -13910,7 +13962,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
         page.html = serialize(fragment);
       }
       const nestedByRoot = /* @__PURE__ */ new Map();
-      const rebuiltBlocks = new Map([...tableBlocks, ...embeddedPages, ...[...rebuiltLists].map((id) => [id, blocks.get(id)])]);
+      const rebuiltBlocks = new Map([...tableBlocks, ...embeddedPages, ...[...rebuiltChildren].map((id) => [id, blocks.get(id)])]);
       for (const block of rebuiltBlocks.values()) {
         if (block.parentId === pageId) continue;
         let owner = blocks.get(block.parentId);
@@ -13949,7 +14001,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
             const table = type === "table";
             warnings2.push({
               code: table ? "table_structure_unconfirmed" : "missing_block",
-              label: (type === "page" ? "内嵌页面 " : table ? "表格块 " : "列表块 ") + id + " 未能确认在容器中的位置。"
+              label: (type === "page" ? "内嵌页面 " : table ? "表格块 " : childLabel(nested.get(id))) + id + " 未能确认在容器中的位置。"
             });
           }
         }
@@ -13977,6 +14029,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
         "divider",
         "todo",
         "grid",
+        "grid_column",
         "file"
       ]);
       for (const type of new Set(roots.map((block) => block.type))) {

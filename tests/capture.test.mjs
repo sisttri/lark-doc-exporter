@@ -1405,3 +1405,54 @@ test('同步引用内嵌页面重建跨视口子标题，保留页壳和标题�
   assert.match(converted.html, /YOLOv7详解/);
   assert.equal((converted.html.match(/<table\b/gu) || []).length, 1);
 });
+
+function virtualStructure(t, {kind='callout',missingSlot=false}={}) {
+  const session=virtualDocument(t,{textIds:[],totalHeight:1500});
+  const doc=globalThis.document,page=doc.querySelector('.page-block'),all=doc.querySelectorAll,one=doc.querySelector;
+  const early=()=>session.scroller.scrollTop<400;
+  const nodes=[];
+  function element(id,type,parent,html,text,top=100) {
+    const block={getAttribute:name=>({'data-block-id':id,'data-block-type':type})[name]??null,
+      parentElement:{closest:parent},get outerHTML(){return html();},get textContent(){return text();},
+      querySelectorAll:()=>[],querySelector:()=>null,
+      getBoundingClientRect:()=>({top:top-session.scroller.scrollTop,bottom:top+700-session.scroller.scrollTop,height:700}),
+      scrollIntoView(){}};
+    nodes.push(block);return block;
+  }
+  const text=(id,value,parent,top)=>element(id,'text',parent,
+    ()=>'<div data-block-id="'+id+'" data-block-type="text"><div class="ace-line"><span data-string="true">'+value+'</span></div></div>',()=>value,top);
+  let root,column,other;
+  const first=text('4','先屏正文',()=>kind==='grid'?column:root,100);
+  const last=text('5','后屏正文',()=>kind==='grid'?column:root,700);
+  const right=text('7','右栏正文',()=>other,100);
+  const visible=()=>early()?[first]:[last];
+  if(kind==='grid') {
+    column=element('3','grid_column',()=>root,()=>'<div data-block-id="3" data-block-type="grid_column"><div class="grid-column-block"><div class="render-unit-wrapper">'+visible().map(n=>n.outerHTML).join('')+'</div><span class="grid-column-percent">50%</span></div></div>',()=>visible().map(n=>n.textContent).join(''));
+    other=element('6','grid_column',()=>root,()=>'<div data-block-id="6" data-block-type="grid_column"><div class="grid-column-block"><div class="render-unit-wrapper">'+right.outerHTML+'</div></div></div>',()=>right.textContent);
+    root=element('2','grid',()=>page,()=>'<div data-block-id="2" data-block-type="grid"><div class="grid-block"><div class="render-unit-wrapper">'+column.outerHTML+other.outerHTML+'</div></div></div>',()=>column.textContent+other.textContent);
+  } else root=element('2','callout',()=>page,()=>'<div data-block-id="2" data-block-type="callout"><div class="ace-line"><span data-string="true">提示自身</span></div>'+(missingSlot?'<div>无法确认子块位置</div>':'<div class="callout-block-children"><div class="render-unit-wrapper">'+visible().map(n=>n.outerHTML).join('')+'</div></div>')+'</div>',()=> '提示自身'+visible().map(n=>n.textContent).join(''));
+  const visibleNodes=()=>[page,root,...(kind==='grid'?[column,other]:[]),...visible(),...(kind==='grid'?[right]:[])];
+  doc.querySelectorAll=selector=>selector==='[data-block-id]'?visibleNodes():all(selector);
+  doc.querySelector=selector=>visibleNodes().find(n=>selector==='[data-block-id="'+n.getAttribute('data-block-id')+'"]')||one(selector);
+  return session;
+}
+
+for(const kind of ['callout','grid']) test(kind+' 合并跨视口子块，保留自身文字与栏序且不重复',async t=>{
+  const session=virtualStructure(t,{kind});
+  const result=await capturePage({onProgress:session.onProgress});
+  assert.equal(result.blocks.length,1);
+  const html=result.blocks[0].html;
+  for(const text of ['先屏正文','后屏正文',...(kind==='grid'?['右栏正文']:['提示自身'])])assert.equal(html.split(text).length-1,1,text);
+  if(kind==='grid')assert.ok(html.indexOf('后屏正文')<html.indexOf('右栏正文'));
+  assert.deepEqual(result.warnings,[]);
+  assert.equal(session.scroller.scrollTop,session.originalTop);
+});
+
+test('Callout 未知子块位置保留自身文字并准确告警，不静默漏采或盲目追加',async t=>{
+  const session=virtualStructure(t,{missingSlot:true});
+  const result=await capturePage({onProgress:session.onProgress});
+  assert.ok(result.blocks[0].html.includes('提示自身'));
+  assert.ok(!result.blocks[0].html.includes('先屏正文'));
+  assert.ok(result.warnings.some(w=>w.code==='missing_block'&&w.label.includes('提示块')));
+  assert.equal(session.scroller.scrollTop,session.originalTop);
+});

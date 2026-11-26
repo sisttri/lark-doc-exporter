@@ -712,8 +712,8 @@ test('quote、callout、divider、todo 映射为 blockquote/hr/待办段落', ()
 
 test('未支持的块按位置记录，多个同类块可以分别定位', () => {
   const result = convertCapture(captureOf([
-    { id: '80', type: 'grid', html: '<div class="block docx-grid-block"></div>' },
-    { id: '81', type: 'grid', html: '<div class="block docx-grid-block"></div>' },
+    { id: '80', type: 'databaseview', html: '<div class="block docx-databaseview-block"></div>' },
+    { id: '81', type: 'databaseview', html: '<div class="block docx-databaseview-block"></div>' },
     { id: '82', type: 'file', html: '<div class="block docx-file-block"></div>' },
     { id: '83', type: 'text', html: '' },
     textBlock('84', ['正常内容']),
@@ -721,8 +721,8 @@ test('未支持的块按位置记录，多个同类块可以分别定位', () =>
   // 解析阶段（无法解析的块）先于渲染阶段的 warning。
   assert.deepEqual(result.warnings, [
     { code: 'unsupported_block', label: '块 83 无法解析' },
-    { code: 'unsupported_block', label: '块 80 未转换（grid）' },
-    { code: 'unsupported_block', label: '块 81 未转换（grid）' },
+    { code: 'unsupported_block', label: '块 80 未转换（databaseview）' },
+    { code: 'unsupported_block', label: '块 81 未转换（databaseview）' },
     { code: 'missing_attachment', label: '附件块 82 原件未采集，仅保留文件名和可用链接' },
   ]);
   assert.match(result.html, /正常内容/u);

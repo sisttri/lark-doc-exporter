@@ -13,7 +13,7 @@ export { readDocumentSource } from './source.js';
 const ZERO_WIDTH = /[\u200b\u200c\u200d\u2060\ufeff]/gu;
 const CODE_ROW = ".code-line-wrapper[data-line-num]";
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-const CONTAINER_TYPES = new Set(['page', 'table', 'code', 'grid', 'quote', 'quote_container', 'synced_reference', 'view']);
+const CONTAINER_TYPES = new Set(['page', 'table', 'code', 'grid', 'grid_column', 'callout', 'quote', 'quote_container', 'synced_reference', 'view']);
 
 // Compare supported content, not viewport positioning, editor selection or toolbar state.
 function semanticContent(html, cell = false) {
@@ -889,15 +889,20 @@ export async function capturePage({ stepRatio = 0.6, dwellMs, maxSteps = 400, on
       if (!childrenByParent.has(block.parentId)) childrenByParent.set(block.parentId, []);
       childrenByParent.get(block.parentId).push(block);
     }
-    // Nested lists virtualize independently of their enclosing reference page.
-    // Rebuild the known child slot bottom-up, keeping the parent's own list line.
-    const rebuiltLists = new Set();
-    function rebuildList(block, visiting = new Set()) {
-      if (rebuiltLists.has(block.id) || visiting.has(block.id)) return;
+    // Known child regions virtualize independently. Rebuild bottom-up without
+    // touching the parent's own line, decoration or document DOM.
+    const childSlots = {bullet:'list-children',ordered:'list-children',callout:'callout-block-children',
+      grid:'grid-block',grid_column:'grid-column-block'};
+    const childLabels = {callout:'提示块 ',grid:'分栏块 ',grid_column:'分栏列 '};
+    const childLabel = block => childLabels[block.type] || '列表块 ';
+    const rebuiltChildren = new Set();
+    function rebuildChildren(block, visiting = new Set()) {
+      if (rebuiltChildren.has(block.id) || visiting.has(block.id)) return;
       const children = childrenByParent.get(block.id) || [];
-      if (!children.length || !['bullet','ordered'].includes(block.type)) return;
+      const slotClass = childSlots[block.type];
+      if (!children.length || !slotClass) return;
       visiting.add(block.id);
-      for (const child of children) rebuildList(child,visiting);
+      for (const child of children) rebuildChildren(child,visiting);
       visiting.delete(block.id);
       const fragment = parseFragment(block.html);
       function findChildren(node) {
@@ -905,7 +910,7 @@ export async function capturePage({ stepRatio = 0.6, dwellMs, maxSteps = 400, on
         const id = attrs.find(attr => attr.name === 'data-block-id')?.value;
         if (id && id !== block.id) return null;
         const classes = attrs.find(attr => attr.name === 'class')?.value.split(/\s+/u) || [];
-        if (classes.includes('list-children')) return node;
+        if (classes.includes(slotClass)) return node;
         for (const child of node.childNodes || []) {
           const found = findChildren(child);
           if (found) return found;
@@ -914,7 +919,17 @@ export async function capturePage({ stepRatio = 0.6, dwellMs, maxSteps = 400, on
       }
       const slot = findChildren(fragment);
       if (!slot) {
-        warnings.push({code:'missing_block',label:'列表块 ' + block.id + ' 未找到嵌套内容容器，未能确认子项位置。'});
+        warnings.push({code:'missing_block',label:childLabel(block) + block.id + ' 未找到嵌套内容容器，未能确认子项位置。'});
+        return;
+      }
+      function hasOwnLine(node) {
+        const attrs = node.attrs || [];
+        if (attrs.some(attr => attr.name === 'data-block-id' && attr.value !== block.id)) return false;
+        if (attrs.some(attr => attr.name === 'class' && attr.value.split(/\s+/u).includes('ace-line'))) return true;
+        return (node.childNodes || []).some(hasOwnLine);
+      }
+      if (hasOwnLine(slot)) {
+        warnings.push({code:'missing_block',label:childLabel(block) + block.id + ' 的自身文字与子项容器混合，未能确认子项位置。'});
         return;
       }
       const ordered = [...children];
@@ -923,9 +938,9 @@ export async function capturePage({ stepRatio = 0.6, dwellMs, maxSteps = 400, on
       slot.childNodes = parseFragment(ordered.map(child=>child.html).join('')).childNodes;
       for (const child of slot.childNodes) child.parentNode = slot;
       block.html = serialize(fragment);
-      rebuiltLists.add(block.id);
+      rebuiltChildren.add(block.id);
     }
-    for (const block of blocks.values()) rebuildList(block);
+    for (const block of blocks.values()) rebuildChildren(block);
     const embeddedPages = new Map([...blocks].filter(([, block]) => block.type === "page" && block.id !== pageId));
     for (const page of embeddedPages.values()) {
       const children = childrenByParent.get(page.id) || [];
@@ -958,7 +973,7 @@ export async function capturePage({ stepRatio = 0.6, dwellMs, maxSteps = 400, on
 
     // 容器快照可能只含一个视口，等根块最后一次刷新后原位写回重建内容。
     const nestedByRoot = new Map();
-    const rebuiltBlocks = new Map([...tableBlocks, ...embeddedPages, ...[...rebuiltLists].map(id => [id,blocks.get(id)])]);
+    const rebuiltBlocks = new Map([...tableBlocks, ...embeddedPages, ...[...rebuiltChildren].map(id => [id,blocks.get(id)])]);
     for (const block of rebuiltBlocks.values()) {
       if (block.parentId === pageId) continue;
       let owner = blocks.get(block.parentId);
@@ -997,14 +1012,14 @@ export async function capturePage({ stepRatio = 0.6, dwellMs, maxSteps = 400, on
           const table = type === 'table';
           warnings.push({
             code: table ? "table_structure_unconfirmed" : "missing_block",
-            label: (type === 'page' ? "内嵌页面 " : table ? "表格块 " : "列表块 ") + id + " 未能确认在容器中的位置。",
+            label: (type === 'page' ? "内嵌页面 " : table ? "表格块 " : childLabel(nested.get(id))) + id + " 未能确认在容器中的位置。",
           });
         }
       }
     }
 
     const knownRootTypes = new Set(["heading1", "heading2", "heading3", "heading4", "heading5", "heading6", "text",
-      "bullet", "ordered", "code", "table", "image", "whiteboard", "diagram", "quote", "quote_container", "synced_reference", "view", "callout", "divider", "todo", "grid", "file"]);
+      "bullet", "ordered", "code", "table", "image", "whiteboard", "diagram", "quote", "quote_container", "synced_reference", "view", "callout", "divider", "todo", "grid", "grid_column", "file"]);
     for (const type of new Set(roots.map((block) => block.type))) {
       if (!knownRootTypes.has(type)) warnings.push({ code: "unsupported_block", label: "未适配的块类型：" + type });
     }

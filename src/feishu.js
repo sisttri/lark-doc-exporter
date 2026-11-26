@@ -17,7 +17,7 @@ const RASTER_EXTENSIONS = new Set(['png', 'jpg', 'gif', 'webp']);
 const HEADING_TYPE = /^heading([1-6])$/u;
 const ESCAPES = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
 const CELL_BLOCK_TYPES = new Set([
-  'text', 'bullet', 'ordered', 'code', 'image', 'whiteboard', 'diagram', 'quote', 'callout', 'quote_container', 'synced_reference', 'view', 'divider', 'todo',
+  'text', 'bullet', 'ordered', 'code', 'image', 'whiteboard', 'diagram', 'quote', 'callout', 'quote_container', 'synced_reference', 'view', 'grid', 'grid_column', 'divider', 'todo',
   'heading1', 'heading2', 'heading3', 'heading4', 'heading5', 'heading6', 'file',
 ]);
 const LANGUAGE_ALIASES = Object.freeze({
@@ -281,6 +281,7 @@ function collectCellBlocks(cell, addWarning) {
   const infos = [];
   const walk = (node) => {
     for (const child of childElements(node)) {
+      if (isHiddenOrControl(child)) continue;
       const type = nodeAttr(child, 'data-block-type');
       if (type === 'table') {
         addWarning('unsupported_block', '表格内嵌套表格未转换');
@@ -404,39 +405,93 @@ export function convertCapture(capture) {
     if (image && image.blockId != null) imageByBlock.set(String(image.blockId), image);
   }
 
-  function renderSequence(infos) {
+  function listNumber(info) {
+    function findOrder(node) {
+      for (const child of childElements(node)) {
+        if (isHiddenOrControl(child)) continue;
+        const type = nodeAttr(child, 'data-block-type');
+        if (type && type !== 'page') continue;
+        if (hasClass(child, 'order')) return child;
+        const found = findOrder(child);
+        if (found) return found;
+      }
+      return null;
+    }
+    const order = findOrder(info.element);
+    const number = order ? Number.parseInt(textContent(order).trim(), 10) : Number.NaN;
+    return Number.isSafeInteger(number) ? number : null;
+  }
+
+  function renderSequence(infos, cell = false) {
     const fragments = [];
     for (let index = 0; index < infos.length;) {
       const { type } = infos[index];
       if (type === 'bullet' || type === 'ordered') {
         const items = [];
-        while (index < infos.length && infos[index].type === type) items.push(infos[index++]);
-        const list = renderList(type, items);
+        let next = listNumber(infos[index]) ?? 1;
+        while (index < infos.length && infos[index].type === type) {
+          const number = type === 'ordered' ? listNumber(infos[index]) : null;
+          if (items.length && number !== null && number !== next) break;
+          items.push(infos[index++]);
+          next++;
+        }
+        const list = renderList(type, items, cell);
         if (list) fragments.push(list);
         continue;
       }
-      const html = renderBlock(infos[index]);
+      const html = cell ? renderCellBlock(infos[index]) : renderBlock(infos[index]);
       if (html) fragments.push(html);
       index++;
     }
     return fragments;
   }
 
-  function renderList(kind, infos) {
-    const tag = kind === 'ordered' ? 'ol' : 'ul';
-    let start = null;
-    if (kind === 'ordered') {
-      const order = findFirstElement(infos[0].element, (element) => hasClass(element, 'order'));
-      const number = order ? Number.parseInt(textContent(order).trim(), 10) : Number.NaN;
-      if (Number.isInteger(number) && number !== 1) start = number;
+  // Only descend through untyped wrappers: typed children must be dispatched as
+  // blocks, rather than letting their text flatten into the parent's ace-lines.
+  function contentParts(element) {
+    const parts = [];
+    function visit(node) {
+      for (const child of childElements(node)) {
+        if (isHiddenOrControl(child)) continue;
+        const type = nodeAttr(child, 'data-block-type');
+        if (type && type !== 'page') parts.push({id:nodeAttr(child, 'data-block-id'),type,element:child});
+        else if (hasClass(child, 'ace-line')) parts.push({line:child});
+        else visit(child);
+      }
     }
+    visit(element);
+    return parts;
+  }
+
+  function renderContent(parts, cell = false, inline = false) {
+    const fragments = [];
+    for (let index = 0; index < parts.length;) {
+      if (parts[index].line) {
+        const lines = [];
+        while (index < parts.length && parts[index].line) {
+          const html = renderInline(parts[index++].line.childNodes, false);
+          if (hasVisibleContent(html)) lines.push(html);
+        }
+        if (lines.length) fragments.push(inline ? lines.join('<br>') : '<p>' + lines.join('<br>') + '</p>');
+      } else {
+        const children = [];
+        while (index < parts.length && !parts[index].line) children.push(parts[index++]);
+        fragments.push(...renderSequence(children, cell));
+      }
+    }
+    return joinCellFragments(fragments);
+  }
+
+  function renderList(kind, infos, cell = false) {
+    const tag = kind === 'ordered' ? 'ol' : 'ul';
+    const start = kind === 'ordered' ? listNumber(infos[0]) : null;
     const items = [];
     for (const info of infos) {
-      const content = renderLines(info.element);
-      if (hasVisibleContent(content)) items.push('<li>' + content + '</li>');
+      const content = renderContent(contentParts(info.element), cell, true);
+      if (content) items.push('<li>' + content + '</li>');
     }
     if (!items.length) return null;
-    return '<' + tag + (start === null ? '' : ' start="' + start + '"') + '>' + items.join('') +
+    return '<' + tag + (start === null || start === 1 ? '' : ' start="' + start + '"') + '>' + items.join('') +
       '</' + tag + '>';
   }
 
@@ -457,34 +512,21 @@ export function convertCapture(capture) {
     return content ? '<p>' + content + '</p>' : null;
   }
 
-  function renderQuote(info) {
-    const content = renderLines(info.element);
-    return content ? '<blockquote><p>' + content + '</p></blockquote>' : null;
+  function renderQuote(info, cell = false) {
+    const content = renderContent(contentParts(info.element), cell);
+    return content ? '<blockquote>' + content + '</blockquote>' : null;
   }
 
-  function renderContainer(info) {
+  function renderContainer(info, cell = false) {
     convertedContainers.add(info.type);
-    const children = [];
-    function visit(node) {
-      for (const child of childElements(node)) {
-        if (isHiddenOrControl(child)) continue;
-        const type = nodeAttr(child, 'data-block-type');
-        if (type && type !== 'page') {
-          children.push({id:nodeAttr(child, 'data-block-id'), type, element:child});
-        } else visit(child);
-      }
-    }
-    visit(info.element);
-    if (!children.length) {
-      if (info.type === 'quote_container') {
-        const content = renderQuote(info);
-        if (content) return content;
-      }
-      const label = info.type === 'quote_container' ? '引用容器 ' : info.type === 'view' ? '视图容器 ' : '同步块 ';
+    const previousWarnings = warnings.length;
+    const content = renderContent(contentParts(info.element), cell);
+    if (!content && warnings.length === previousWarnings) {
+      const label = info.type === 'quote_container' ? '引用容器 ' : info.type === 'view' ? '视图容器 '
+        : ['grid','grid_column'].includes(info.type) ? '分栏容器 ' : '同步块 ';
       addWarning('unsupported_block', label + info.id + ' 尚未读取到已渲染正文');
       return null;
     }
-    const content = renderSequence(children).join('');
     return info.type === 'quote_container' ? '<blockquote>' + content + '</blockquote>' : content || null;
   }
 
@@ -599,17 +641,22 @@ export function convertCapture(capture) {
     switch (info.type) {
       case 'text': return renderLines(info.element) || null;
       case 'bullet':
-      case 'ordered': return renderList(info.type, [info]);
+      case 'ordered': return renderList(info.type, [info], true);
       case 'code': return renderCode(info);
       case 'image':
       case 'diagram':
       case 'whiteboard': return renderImage(info);
       case 'file': return renderFile(info);
       case 'quote':
-      case 'callout': return renderQuote(info);
+      case 'callout': return renderQuote(info, true);
       case 'quote_container':
       case 'synced_reference':
       case 'view': return renderContainer(info);
+      case 'grid':
+      case 'grid_column': return renderContainer(info, true);
+      case 'table':
+        addWarning('unsupported_block', '表格内嵌套表格未转换');
+        return null;
       case 'divider': return '<hr>';
       case 'todo': return renderTodo(info);
       default: {
@@ -626,21 +673,7 @@ export function convertCapture(capture) {
   }
 
   function renderCellSequence(infos) {
-    const fragments = [];
-    for (let index = 0; index < infos.length;) {
-      const { type } = infos[index];
-      if (type === 'bullet' || type === 'ordered') {
-        const items = [];
-        while (index < infos.length && infos[index].type === type) items.push(infos[index++]);
-        const list = renderList(type, items);
-        if (list) fragments.push(list);
-        continue;
-      }
-      const html = renderCellBlock(infos[index]);
-      if (html) fragments.push(html);
-      index++;
-    }
-    return fragments;
+    return renderSequence(infos, true);
   }
 
   function renderTableCell(cell) {
@@ -721,7 +754,9 @@ export function convertCapture(capture) {
       case 'callout': return renderQuote(info);
       case 'quote_container':
       case 'synced_reference':
-      case 'view': return renderContainer(info);
+      case 'view':
+      case 'grid':
+      case 'grid_column': return renderContainer(info);
       case 'divider': return '<hr>';
       case 'todo': return renderTodo(info);
       default:
