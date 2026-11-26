@@ -7,8 +7,12 @@
 ## 安装
 
 1. 安装并启用 [Tampermonkey](https://www.tampermonkey.net/)。在浏览器要求时，开启扩展的“允许用户脚本”。
-2. 打开 [安装脚本](https://raw.githubusercontent.com/sisttri/lark-doc-exporter/main/lark-doc-exporter.user.js)，按油猴提示安装。也可以从发布包导入安装 ZIP。
+2. 打开 [Greasy Fork 社区页面](https://greasyfork.org/zh-CN/scripts/607471-飞书文档导出工具)，点击“安装此脚本”，按油猴提示安装。
 3. 等待油猴完成两项 PDF 资源的下载和校验，再刷新飞书文字文档。
+
+也可以使用 [GitHub 安装链接](https://raw.githubusercontent.com/sisttri/lark-doc-exporter/main/lark-doc-exporter.user.js)，或从 [GitHub 发布版本](https://github.com/sisttri/lark-doc-exporter/releases)下载安装 ZIP。
+
+社区版主脚本由 Greasy Fork 分发，PDF 引擎和字体仍从 GitHub 下载并缓存。从社区安装的用户通过 Greasy Fork 接收更新；后续版本需更新同一个社区脚本，仅推送 GitHub 不会更新这一安装渠道。维护步骤见 [发布说明](docs/publishing.md)。
 
 如果此前安装了内部测试脚本“飞书本地保存”，请先关闭旧脚本，避免两个入口互相干扰。当前名称和首发版本号与内部测试版不同，需要手动迁移。
 
@@ -54,7 +58,7 @@
 
 文档正文、素材、转换和打包留在当前浏览器中，不上传到本项目服务器。本项目没有服务器、统计或遥测。高清图片和附件请求只从已核对归属的当前文档原生配置产生，使用浏览器已有会话；不读取任意页面链接来批量下载。
 
-安装或更新脚本时，油猴会访问 GitHub 下载主脚本和两个静态 PDF 资源。资源 URL 固定到 Git commit，使用 SHA-256 SRI，并在生成 PDF 前再次校验缓存内容。PDF 运行时只读取 `GM_getResourceText` 预缓存，不从网络补拉依赖；缓存缺失或损坏会提示重新安装。页面自身的网络请求以及你主动点击的普通链接由飞书和浏览器处理。
+主脚本按安装渠道由 Greasy Fork 或 GitHub 分发；两项 PDF 静态资源均从 GitHub 下载并由油猴缓存。资源 URL 固定到 Git commit，使用 SHA-256 SRI，并在生成 PDF 前再次校验缓存内容。PDF 运行时只读取 `GM_getResourceText` 预缓存，不从网络补拉依赖；缓存缺失或损坏会提示重新安装。页面自身的网络请求以及你主动点击的普通链接由飞书和浏览器处理。
 
 图片、附件、画板、流程图及块树路径通过油猴的 `unsafeWindow` 读取当前页面提供的能力，并核对文档、模型和 DOM 归属。原生接口属于页面内部实现，飞书更新后可能不可用；按对应规则回退或保留缺失提示。脚本不新增账号授权、Token 配置或服务端。
 
